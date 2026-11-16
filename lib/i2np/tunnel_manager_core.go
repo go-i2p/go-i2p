@@ -7,6 +7,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/tunnel/build"
 	"github.com/go-i2p/logger"
@@ -89,19 +90,35 @@ type TunnelManager struct {
 	clientBuildSuccessWindow *buildEventWindow // successful I2CP client session tunnel builds
 	clientBuildRejectWindow  *buildEventWindow // rejected I2CP client session tunnel builds
 	clientBuildExpireWindow  *buildEventWindow // timed-out I2CP client session tunnel builds
+
+	// poolConfig carries the operator's tunnel settings so the pools built here
+	// (and rebuilt by SetPeerSelector) honor the documented tunnel.* knobs
+	// instead of DefaultPoolConfig(). Defaults to config.Defaults().Tunnel.
+	poolConfig config.TunnelDefaults
 }
 
 // NewTunnelManager creates a new tunnel manager with build request tracking.
 // The background cleanup goroutine is started lazily on the first build request,
 // avoiding resource leaks if the TunnelManager is created but never used.
 // Creates separate inbound and outbound tunnel pools for proper statistics tracking.
+// The pools use built-in defaults; use NewTunnelManagerWithConfig to honor the
+// operator's tunnel.* settings.
 func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
+	return NewTunnelManagerWithConfig(peerSelector, config.Defaults().Tunnel)
+}
+
+// NewTunnelManagerWithConfig creates a tunnel manager whose inbound/outbound
+// pools are built from the operator's tunnel configuration, so the documented
+// tunnel.* knobs (min/max_pool_size, length, lifetime, build_retries,
+// replace_before_expiration, maintenance_interval) reach the pools that enforce
+// them. A zero-valued cfg field falls back to the built-in pool default.
+func NewTunnelManagerWithConfig(peerSelector tunnel.PeerSelector, cfg config.TunnelDefaults) *TunnelManager {
 	// Create separate pools for inbound and outbound tunnels
-	inboundConfig := tunnel.DefaultPoolConfig()
+	inboundConfig := tunnel.PoolConfigFromTunnelDefaults(cfg)
 	inboundConfig.IsInbound = true
 	inboundPool := tunnel.NewTunnelPoolWithConfig(peerSelector, inboundConfig)
 
-	outboundConfig := tunnel.DefaultPoolConfig()
+	outboundConfig := tunnel.PoolConfigFromTunnelDefaults(cfg)
 	outboundConfig.IsInbound = false
 	outboundPool := tunnel.NewTunnelPoolWithConfig(peerSelector, outboundConfig)
 
@@ -110,6 +127,7 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 		inboundPool:              inboundPool,
 		outboundPool:             outboundPool,
 		peerSelector:             peerSelector,
+		poolConfig:               cfg,
 		pendingBuilds:            make(map[int]*buildRequest),
 		expiredBuilds:            make(map[int]expiredBuild),
 		cleanupStop:              make(chan struct{}),
@@ -244,11 +262,11 @@ func (tm *TunnelManager) SetPeerSelector(selector tunnel.PeerSelector) {
 		if tm.outboundPool != nil {
 			tm.outboundPool.Stop()
 		}
-		inboundConfig := tunnel.DefaultPoolConfig()
+		inboundConfig := tunnel.PoolConfigFromTunnelDefaults(tm.poolConfig)
 		inboundConfig.IsInbound = true
 		tm.inboundPool = tunnel.NewTunnelPoolWithConfig(selector, inboundConfig)
 
-		outboundConfig := tunnel.DefaultPoolConfig()
+		outboundConfig := tunnel.PoolConfigFromTunnelDefaults(tm.poolConfig)
 		outboundConfig.IsInbound = false
 		tm.outboundPool = tunnel.NewTunnelPoolWithConfig(selector, outboundConfig)
 	}

@@ -647,8 +647,18 @@ func (r *Router) launchOutboundFallbackCheck(pool *tunnel.Pool) {
 // initializeTunnelManager creates and configures the tunnel manager for building and maintaining tunnels.
 // The tunnel manager coordinates tunnel building, maintains tunnel pools, and handles tunnel lifecycle.
 func (r *Router) initializeTunnelManager() error {
+	// Build the manager from the operator's tunnel config so the documented
+	// pool knobs (tunnel.min_pool_size, max_pool_size, length, lifetime,
+	// build_retries, replace_before_expiration, maintenance_interval) actually
+	// reach the inbound/outbound pools. NewTunnelManager() would use the
+	// hardcoded DefaultPoolConfig() and silently ignore every one of them.
+	// Fall back to defaults only when the router has no tunnel config.
+	tunnelCfg := config.Defaults().Tunnel
+	if r.cfg != nil && r.cfg.Tunnel != nil {
+		tunnelCfg = *r.cfg.Tunnel
+	}
 	// Create tunnel manager with NetDB as peer selector
-	tm := i2np.NewTunnelManager(r.netdb)
+	tm := i2np.NewTunnelManagerWithConfig(r.netdb, tunnelCfg)
 
 	// Set router as session provider for sending tunnel build messages
 	tm.SetSessionProvider(r)

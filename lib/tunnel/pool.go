@@ -13,6 +13,7 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/router_info"
+	"github.com/go-i2p/go-i2p/lib/config"
 	"github.com/go-i2p/go-i2p/lib/tunnel/replycodes"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/go-i2p/logger"
@@ -249,6 +250,9 @@ type PoolConfig struct {
 	MaxBuildRetries int
 	// HopCount is the number of hops for tunnels in this pool
 	HopCount int
+	// MaintenanceInterval is how often the pool runs its maintenance cycle
+	// (build/expiry/replacement checks). Zero means poolMaintenanceInterval.
+	MaintenanceInterval time.Duration
 	// IsInbound indicates if this pool manages inbound tunnels
 	IsInbound bool
 	// IsClientPool indicates this pool belongs to an I2CP client session (vs exploratory router pools).
@@ -261,15 +265,55 @@ type PoolConfig struct {
 // values match the I2P spec's recommended tunnel lifetime and hop count.
 func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{
-		MinTunnels:       defaultPoolMinTunnels,
-		MaxTunnels:       defaultPoolMaxTunnels,
-		TunnelLifetime:   poolTunnelLifetime,
-		RebuildThreshold: poolRebuildThreshold,
-		BuildRetryDelay:  defaultPoolBuildRetryDelay, // exponential backoff increases this from the first retry
-		MaxBuildRetries:  defaultPoolMaxBuildRetries,
-		HopCount:         defaultPoolHopCount,
-		IsInbound:        false,
+		MinTunnels:          defaultPoolMinTunnels,
+		MaxTunnels:          defaultPoolMaxTunnels,
+		TunnelLifetime:      poolTunnelLifetime,
+		RebuildThreshold:    poolRebuildThreshold,
+		BuildRetryDelay:     defaultPoolBuildRetryDelay, // exponential backoff increases this from the first retry
+		MaxBuildRetries:     defaultPoolMaxBuildRetries,
+		HopCount:            defaultPoolHopCount,
+		MaintenanceInterval: poolMaintenanceInterval,
+		IsInbound:           false,
 	}
+}
+
+// PoolConfigFromTunnelDefaults builds a PoolConfig from the operator's tunnel
+// configuration so the documented tunnel.* knobs (min/max_pool_size, length,
+// lifetime, build_retries, replace_before_expiration, maintenance_interval)
+// actually reach the pools that enforce them. Without this, NewTunnelManager
+// built every pool from DefaultPoolConfig() and silently ignored every one of
+// those settings.
+//
+// Each knob falls back to the built-in pool default when the operator left it
+// at zero, so a partially-populated config never disables a bound. Lifetime is
+// mapped with the same headroom DefaultPoolConfig uses (poolTunnelLifetime sits
+// one minute above defaultParticipantLifetime so a tunnel is replaced ahead of
+// the wire expiry, not at the boundary): the pool's internal replacement age is
+// cfg.lifetime + that headroom.
+func PoolConfigFromTunnelDefaults(cfg config.TunnelDefaults) PoolConfig {
+	pc := DefaultPoolConfig()
+	if cfg.MinPoolSize > 0 {
+		pc.MinTunnels = cfg.MinPoolSize
+	}
+	if cfg.MaxPoolSize > 0 {
+		pc.MaxTunnels = cfg.MaxPoolSize
+	}
+	if cfg.TunnelLength > 0 {
+		pc.HopCount = cfg.TunnelLength
+	}
+	if cfg.TunnelLifetime > 0 {
+		pc.TunnelLifetime = cfg.TunnelLifetime + (poolTunnelLifetime - defaultParticipantLifetime)
+	}
+	if cfg.ReplaceBeforeExpiration > 0 {
+		pc.RebuildThreshold = cfg.ReplaceBeforeExpiration
+	}
+	if cfg.BuildRetries > 0 {
+		pc.MaxBuildRetries = cfg.BuildRetries
+	}
+	if cfg.MaintenanceInterval > 0 {
+		pc.MaintenanceInterval = cfg.MaintenanceInterval
+	}
+	return pc
 }
 
 // Pool manages a collection of tunnels with automatic maintenance.
