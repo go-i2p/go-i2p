@@ -86,22 +86,23 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.26" # Adjust this version as needed
-
-      - name: Cache Go modules
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          # setup-go@v4 caches ~/go/pkg/mod and ~/.cache/go-build by default,
+          # keyed on go.sum. A second manual actions/cache on those same paths
+          # used to collide with it ("Failed to restore: tar ... exit code 2" /
+          # "Cannot open: File exists"), leaving the build cache cold so the
+          # heavy lib/router package recompiled from scratch and hit the 10m
+          # per-package test timeout on loaded runners. Rely on setup-go's cache.
+          cache: true
 
       - name: Install gofumpt
         run: go install mvdan.cc/gofumpt@latest
 
       - name: Run all tests
-        run: go test ./...
+        # -timeout 20m raises the per-package test timeout above the 10m
+        # default: lib/router runs full network bootstrap in several tests and
+        # sits near the default limit on a loaded shared runner, where it
+        # otherwise flakes with "panic: test timed out after 10m0s".
+        run: go test -timeout 20m ./...
         env:
           GO: go
           DEBUG_I2P: debug
