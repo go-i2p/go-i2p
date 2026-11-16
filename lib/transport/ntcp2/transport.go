@@ -1649,8 +1649,21 @@ func (t *NTCP2Transport) handleDataPhaseRouterInfo(remoteAddr string, peerHash d
 		return
 	}
 
-	// Flood the original wire bytes as a RouterInfo DatabaseStore.
-	flooder.FloodDatabaseStore(receivedHash, riBytes, i2np.DatabaseStoreTypeRouterInfo)
+	// Flood the RouterInfo as a properly framed RouterInfo DatabaseStore. The
+	// NTCP2 block carries the RouterInfo UNCOMPRESSED (ntcp2.rst: RI blocks are
+	// never gzip-compressed), but a DatabaseStore of type RouterInfo MUST carry a
+	// 2-byte big-endian compressed length followed by the gzip-compressed
+	// RouterInfo. Flooding the raw block bytes produced an uncompressed,
+	// mis-framed payload that every recipient's validator silently rejected — the
+	// flood was unfloodable (I2P-D-1). BuildRouterInfoStorePayload applies the
+	// required framing.
+	payload, err := i2np.BuildRouterInfoStorePayload(riBytes)
+	if err != nil {
+		t.logger.WithError(err).WithField("remote_addr", remoteAddr).
+			Debug("NTCP2 data phase: failed to build RouterInfo flood payload; not flooding")
+		return
+	}
+	flooder.FloodDatabaseStore(receivedHash, payload, i2np.DatabaseStoreTypeRouterInfo)
 }
 
 // SetIdentity updates the router identity used for new inbound handshakes,

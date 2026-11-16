@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/binary"
+	"io"
 	"testing"
 
 	"github.com/go-i2p/common/data"
@@ -184,9 +186,27 @@ func TestHandleDataPhaseRouterInfo_FloodsWhenRequested(t *testing.T) {
 
 	require.Len(t, flooder.calls, 1, "flag bit 0 must trigger flooding")
 	assert.Equal(t, peerHash, flooder.calls[0].key)
-	assert.Equal(t, riBytes, flooder.calls[0].data,
-		"the original wire bytes must be flooded, not a re-serialization")
 	assert.Equal(t, byte(i2np.DatabaseStoreTypeRouterInfo), flooder.calls[0].dataType)
+
+	// I2P-D-1: the NTCP2 block carries the RouterInfo UNCOMPRESSED, but a
+	// RouterInfo DatabaseStore must carry a 2-byte big-endian compressed length
+	// followed by gzip-compressed RouterInfo bytes. Flooding the raw block bytes
+	// produced an unfloodable payload (every recipient's validator rejected it).
+	// Assert the flooded payload is correctly framed and round-trips to the
+	// original RouterInfo.
+	payload := flooder.calls[0].data
+	require.Greater(t, len(payload), 2, "payload must carry a 2-byte length prefix")
+	compressedLen := int(binary.BigEndian.Uint16(payload[:2]))
+	require.Equal(t, len(payload)-2, compressedLen,
+		"length prefix must equal the gzip payload length (properly framed)")
+
+	gz, err := gzip.NewReader(bytes.NewReader(payload[2:]))
+	require.NoError(t, err, "flood payload body must be valid gzip")
+	defer gz.Close()
+	decompressed, err := io.ReadAll(gz)
+	require.NoError(t, err, "failed to decompress flood payload")
+	assert.Equal(t, riBytes, decompressed,
+		"decompressed flood payload must equal the original RouterInfo bytes")
 }
 
 func TestHandleDataPhaseRouterInfo_MalformedBytesIgnored(t *testing.T) {
