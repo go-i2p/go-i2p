@@ -82,3 +82,35 @@ func TestResolveRouterBandwidthTier_UsesEffectiveSessionBottleneck(t *testing.T)
 		t.Fatalf("resolveRouterBandwidthTier() = %q, want %q", got, "O")
 	}
 }
+
+// TestEffectiveSessionLimit_IncludesMaxConcurrentSessions is the C1 guard for
+// router.max_concurrent_sessions: it must participate in the session-limit floor
+// that derives the advertised bandwidth tier. Before this fix the field was
+// validated but never read, so a lower max_concurrent_sessions than
+// max_connections had no effect on the tier.
+func TestEffectiveSessionLimit_IncludesMaxConcurrentSessions(t *testing.T) {
+	// max_concurrent_sessions is the tightest bound; it must win the floor.
+	cfg := &config.RouterConfig{
+		MaxConnections:        2000,
+		MaxConcurrentSessions: 300,
+		Transport: &config.TransportDefaults{
+			NTCP2MaxConnections: 3000,
+		},
+	}
+	if got := effectiveSessionLimit(cfg); got != 300 {
+		t.Fatalf("effectiveSessionLimit() = %d, want 300 (max_concurrent_sessions must be the floor)", got)
+	}
+
+	// Zero max_concurrent_sessions must not lower the floor (falls back to the
+	// other bounds), so a default/unset value is behavior-neutral.
+	cfg2 := &config.RouterConfig{
+		MaxConnections:        2000,
+		MaxConcurrentSessions: 0,
+		Transport: &config.TransportDefaults{
+			NTCP2MaxConnections: 3000,
+		},
+	}
+	if got := effectiveSessionLimit(cfg2); got != 2000 {
+		t.Fatalf("effectiveSessionLimit() = %d, want 2000 (zero max_concurrent_sessions must not lower the floor)", got)
+	}
+}

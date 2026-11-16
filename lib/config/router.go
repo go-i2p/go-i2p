@@ -61,6 +61,10 @@ type RouterConfig struct {
 	BaseDir string
 	// the path to the working config directory where files are changed
 	WorkingDir string
+	// MaxConcurrentSessions is the maximum number of active transport sessions.
+	// Contributes to the session-limit floor that derives the advertised
+	// bandwidth tier (alongside MaxConnections). Default: 200.
+	MaxConcurrentSessions int
 	// RouterInfoRefreshInterval is how often the router re-publishes its own
 	// RouterInfo to the network. Drives the publisher's RouterInfo cadence.
 	// Default: 30 minutes.
@@ -195,6 +199,7 @@ var defaultRouterConfig = &RouterConfig{
 	WorkingDir:                defaultConfig(),
 	RouterInfoFile:            defaultRouterInfoFilePath(),
 	RouterInfoRefreshInterval: DefaultRouterInfoRefreshInterval,
+	MaxConcurrentSessions:     DefaultMaxConcurrentSessions,
 	MaxBandwidth:              DefaultMaxBandwidthBytesPerSec, // 1 MB/s
 	BandwidthTier:             "",
 	MaxConnections:            DefaultRouterMaxConnections,
@@ -278,6 +283,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 		WorkingDir:                src.WorkingDir,
 		RouterInfoFile:            src.RouterInfoFile,
 		RouterInfoRefreshInterval: src.RouterInfoRefreshInterval,
+		MaxConcurrentSessions:     src.MaxConcurrentSessions,
 		MaxBandwidth:              src.MaxBandwidth,
 		MaxBandwidthIn:            src.MaxBandwidthIn,
 		MaxBandwidthOut:           src.MaxBandwidthOut,

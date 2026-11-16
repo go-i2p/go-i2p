@@ -280,6 +280,7 @@ func NewRouterConfigFromViper() (*RouterConfig, error) {
 		BandwidthTier:             viper.GetString("router.bandwidth_tier"),
 		SharePercentage:           viper.GetInt("router.share_percentage"),
 		MaxConnections:            viper.GetInt("router.max_connections"),
+		MaxConcurrentSessions:     viper.GetInt("router.max_concurrent_sessions"),
 		AcceptTunnels:             viper.GetBool("router.accept_tunnels"),
 		Testnet:                   viper.GetBool("router.testnet"),
 		Hidden:                    viper.GetBool("router.hidden"),

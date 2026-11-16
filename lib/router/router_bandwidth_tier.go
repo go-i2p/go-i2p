@@ -84,6 +84,11 @@ func effectiveSessionLimit(cfg *config.RouterConfig) int {
 	}
 
 	consider(cfg.MaxConnections)
+	// router.max_concurrent_sessions is the active-transport-session ceiling; it
+	// participates in the same session-limit floor as max_connections so the
+	// advertised bandwidth tier reflects the tighter of the two. Before this it
+	// was validated but never read, so the knob was dead.
+	consider(cfg.MaxConcurrentSessions)
 	if cfg.Transport != nil {
 		consider(cfg.Transport.NTCP2MaxConnections)
 	}
