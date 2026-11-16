@@ -334,9 +334,10 @@ func (r *Router) closeInboundConnectionAsync(conn net.Conn) {
 	if conn == nil {
 		return
 	}
-	go func() {
-		_ = conn.Close()
-	}()
+	// One-shot close goroutine: wrap in safeGo so a panic in conn.Close() cannot
+	// take down the router (C3 recover-seam convention, matching the transport
+	// package's safeGo("...requestClose", ...) call sites).
+	safeGo("Router.closeInboundConnectionAsync", func() { _ = conn.Close() })
 }
 
 // attachInboundSSU2TransportCallbacks wires transport-level callbacks into an

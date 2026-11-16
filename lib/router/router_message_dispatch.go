@@ -229,8 +229,16 @@ func cleanupReadWarnLastByPeer() {
 // removes stale entries from the readWarnLastByPeer map to prevent unbounded growth.
 // Entries not updated for readWarnMaxAge are evicted on each cleanup cycle.
 // Called from mainloop to ensure proper lifecycle management and shutdown.
+//
+// The sweep period is fed from performance.cleanup_interval (C1: this knob
+// previously never reached behavior). Zero/unset falls back to the built-in
+// readWarnCleanupInterval so behavior is unchanged when unconfigured.
 func (r *Router) startReadWarnLimiterCleanup() {
-	r.startPeriodicTask("startReadWarnLimiterCleanup", readWarnCleanupInterval, func() {
+	interval := readWarnCleanupInterval
+	if r.cfg != nil && r.cfg.Performance != nil && r.cfg.Performance.CleanupInterval > 0 {
+		interval = r.cfg.Performance.CleanupInterval
+	}
+	r.startPeriodicTask("startReadWarnLimiterCleanup", interval, func() {
 		cleanupReadWarnLastByPeer()
 	})
 }
