@@ -378,28 +378,53 @@ func extractMappingData(data []byte) []byte {
 	return data[:mappingSize]
 }
 
-// parseOptionEntries parses key=value;key=value;... format into a map.
+// parseOptionEntries parses an I2P [Mapping]_ body into a map.
+//
+// The GetDate authentication Mapping is a sequence of length-prefixed I2P
+// String pairs (common-structures.rst):
+//
+//	[keyLen:1][key][=][valueLen:1][value][;]...
+//
+// A spec-conformant client (e.g. the Java I2P router, as of 0.9.11) sends the
+// credentials in exactly this length-prefixed form. Splitting the raw bytes on
+// ';' and '=' instead — the previous behavior — glued each 1-byte length
+// prefix onto the front of its key ("\ri2cp.username"), so the
+// "i2cp.username"/"i2cp.password" lookups never matched and authentication
+// silently failed for every conformant client.
+//
+// The Mapping need not be sorted (i2cp.rst:888-889: "The Mapping need not be
+// sorted as this message is not signed"), so this parser deliberately does not
+// use common.ReadMapping, which rejects out-of-order keys.
 func parseOptionEntries(data []byte) map[string]string {
 	options := make(map[string]string)
-	entries := strings.Split(string(data), ";")
-	for _, entry := range entries {
-		if entry == "" {
-			continue
+	for len(data) > 0 {
+		key, rest, err := common.ReadI2PString(data)
+		if err != nil {
+			break
 		}
-		key, value := splitKeyValue(entry)
-		if key != "" {
-			options[key] = value
+		// A literal '=' separates the key String from the value String.
+		if len(rest) == 0 || rest[0] != '=' {
+			break
 		}
+		value, rest, err := common.ReadI2PString(rest[1:])
+		if err != nil {
+			break
+		}
+		if keyStr, keyErr := key.Data(); keyErr == nil && keyStr != "" {
+			valueStr := ""
+			if v, valueErr := value.Data(); valueErr == nil {
+				valueStr = v
+			}
+			options[keyStr] = valueStr
+		}
+		// A literal ';' terminates each pair; it is optional after the last.
+		if len(rest) > 0 && rest[0] == ';' {
+			rest = rest[1:]
+		}
+		data = rest
+	}
+	if len(options) == 0 {
+		return nil
 	}
 	return options
-}
-
-// splitKeyValue splits a "key=value" string into its components.
-func splitKeyValue(s string) (key, value string) {
-	for i := 0; i < len(s); i++ {
-		if s[i] == '=' {
-			return s[:i], s[i+1:]
-		}
-	}
-	return s, ""
 }

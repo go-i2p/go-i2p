@@ -2,6 +2,7 @@ package i2cp
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,12 +37,33 @@ func assertDestinationMethodsWork(t *testing.T, dest *destination.Destination, l
 }
 
 // buildGetDateOptionsData constructs a length-prefixed options byte slice
-// for parseGetDateOptions tests.
+// for parseGetDateOptions tests. The "content" argument is given in the
+// human-readable "key=value;key=value;" form and is converted to the real
+// I2P [Mapping]_ wire encoding a conformant client sends:
+//
+//	[totalSize:2]([keyLen:1][key][=][valueLen:1][value][;])...
 func buildGetDateOptionsData(content string) []byte {
-	d := make([]byte, 2+len(content))
-	d[0] = byte(len(content) >> 8)
-	d[1] = byte(len(content))
-	copy(d[2:], content)
+	var body []byte
+	for _, entry := range strings.Split(content, ";") {
+		if entry == "" {
+			continue
+		}
+		key, value := entry, ""
+		if i := strings.IndexByte(entry, '='); i >= 0 {
+			key, value = entry[:i], entry[i+1:]
+		}
+		body = append(body, byte(len(key)))
+		body = append(body, key...)
+		body = append(body, '=')
+		body = append(body, byte(len(value)))
+		body = append(body, value...)
+		body = append(body, ';')
+	}
+
+	d := make([]byte, 2+len(body))
+	d[0] = byte(len(body) >> 8)
+	d[1] = byte(len(body))
+	copy(d[2:], body)
 	return d
 }
 

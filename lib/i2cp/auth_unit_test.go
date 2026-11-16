@@ -209,29 +209,6 @@ func TestParseGetDateOptions_NoTrailingSemicolon(t *testing.T) {
 	assert.Equal(t, "value", options["key"])
 }
 
-// TestSplitKeyValue tests the key=value string splitting helper.
-func TestSplitKeyValue(t *testing.T) {
-	tests := []struct {
-		input string
-		key   string
-		value string
-	}{
-		{"key=value", "key", "value"},
-		{"key=", "key", ""},
-		{"key", "key", ""},
-		{"a=b=c", "a", "b=c"}, // only first = is the delimiter
-		{"=value", "", "value"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			key, value := splitKeyValue(tt.input)
-			assert.Equal(t, tt.key, key)
-			assert.Equal(t, tt.value, value)
-		})
-	}
-}
-
 // TestServer_AuthenticateConnection_NoAuthenticator tests that authentication
 // always succeeds when no authenticator is configured.
 func TestServer_AuthenticateConnection_NoAuthenticator(t *testing.T) {
