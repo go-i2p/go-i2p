@@ -21,7 +21,9 @@ router:
   # RouterInfo is public data. Set to "" to disable.
   # Default: <working_dir>/router.info (i.e. ~/.go-i2p/config/router.info)
   # router_info_file: "/root/.go-i2p/config/router.info"
-  # How long messages stay valid
+  # How long messages stay valid.
+  # NOTE: not yet honored — outgoing I2NP messages currently use the built-in
+  # 60s TTL constant; this value is parsed but does not change behavior.
   message_expiration_time: 60s
   # Maximum number of active transport sessions
   max_concurrent_sessions: 200
@@ -82,7 +84,8 @@ netdb:
   max_lease_sets: 1000
   # How often to check for expired entries
   expiration_check_interval: 1m
-  # When to refresh LeaseSets before expiration
+  # When to refresh LeaseSets before expiration.
+  # NOTE: not yet honored — parsed but does not change behavior.
   lease_set_refresh_threshold: 2m
   # How often to explore the network
   exploration_interval: 5m
@@ -265,9 +268,11 @@ tunnel:
   length: 3
   # How long tunnels stay active
   lifetime: 10m
-  # How often to test tunnel health
+  # How often to test tunnel health.
+  # NOTE: not yet honored — active tunnel liveness testing is not wired into the
+  # pool maintenance loop; these values are parsed but do not change behavior.
   test_interval: 60s
-  # Maximum time to wait for test response
+  # Maximum time to wait for test response (see test_interval note above).
   test_timeout: 5s
   # Maximum time to wait for tunnel build
   build_timeout: 90s
@@ -316,21 +321,31 @@ transport:
   ssu2_require_retry: false
   
   # Connection parameters
+  # connection_timeout bounds the TCP connect phase of an outbound dial.
+  # idle_timeout seeds the adaptive idle-expire window (clamped to protocol
+  # bounds). Both are honored.
   connection_timeout: 30s
   idle_timeout: 5m
+  # max_message_size: NOTE: not yet honored — inbound message size limits are
+  # enforced by per-type protocol constants (RouterInfo/LeaseSet/DatabaseStore
+  # caps), not this value; it is parsed but does not change behavior.
   max_message_size: 32768  # 32 KiB
 
 # Performance Tuning
 performance:
   # Buffer for router message processing
   message_queue_size: 256
-  # Concurrent message processing workers (0 = use GOMAXPROCS)
+  # Concurrent message processing workers (0 = use GOMAXPROCS).
+  # NOTE: not yet honored — parsed but does not change behavior.
   worker_pool_size: 8
-  # Cache size for garlic sessions
+  # Cache size for garlic sessions.
+  # NOTE: not yet honored — parsed but does not change behavior.
   garlic_encryption_cache_size: 1000
-  # Cache size for message fragment reassembly
+  # Cache size for message fragment reassembly.
+  # NOTE: not yet honored — parsed but does not change behavior.
   fragment_cache_size: 500
-  # How often to run cleanup tasks
+  # How often to run cleanup tasks.
+  # NOTE: not yet honored — parsed but does not change behavior.
   cleanup_interval: 5m
 
 # Congestion Control

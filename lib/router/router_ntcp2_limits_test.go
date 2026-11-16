@@ -11,6 +11,7 @@ package router
 
 import (
 	"testing"
+	"time"
 
 	"github.com/go-i2p/go-i2p/lib/config"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
@@ -24,12 +25,44 @@ func TestApplyNTCP2SessionLimits_PropagatesOperatorValues(t *testing.T) {
 		NTCP2MaxConnections:         50,
 		NTCP2MaxInflightHandshakes:  12,
 		NTCP2MaxHandshakesPerSource: 3,
+		ConnectionTimeout:           5 * time.Second,
+		IdleTimeout:                 3 * time.Minute,
 	})
 
 	assert.Equal(t, 50, dst.GetMaxSessions(),
 		"transport.ntcp2-max-connections must reach the transport, not be overridden by its default")
 	assert.Equal(t, 12, dst.GetMaxInflightHandshakes(), "handshake global cap must reach the transport")
 	assert.Equal(t, 3, dst.GetMaxHandshakesPerSource(), "handshake per-source cap must reach the transport")
+	assert.Equal(t, 5*time.Second, dst.GetConnectionTimeout(),
+		"transport.connection_timeout must reach the transport's dial deadline (I2P C1)")
+	assert.Equal(t, 3*time.Minute, dst.GetIdleTimeout(),
+		"transport.idle_timeout must seed the idle-expire window (I2P C1)")
+}
+
+// TestApplyNTCP2SessionLimits_IdleTimeoutClampedToProtocolBounds pins that an
+// operator idle_timeout outside the protocol's [min,max] window is clamped by the
+// transport rather than accepted verbatim.
+func TestApplyNTCP2SessionLimits_IdleTimeoutClampedToProtocolBounds(t *testing.T) {
+	dst := &ntcp.Config{}
+	applyNTCP2SessionLimits(dst, &config.TransportDefaults{IdleTimeout: 1 * time.Second})
+	assert.GreaterOrEqual(t, dst.GetIdleTimeout(), 2*time.Minute,
+		"a too-small idle_timeout must clamp up to the protocol minimum")
+
+	dst2 := &ntcp.Config{}
+	applyNTCP2SessionLimits(dst2, &config.TransportDefaults{IdleTimeout: 100 * time.Hour})
+	assert.LessOrEqual(t, dst2.GetIdleTimeout(), 11*time.Minute,
+		"a too-large idle_timeout must clamp down to the protocol maximum")
+}
+
+// TestApplyNTCP2SessionLimits_ConnectionTimeoutUnsetDefersToDefault pins that an
+// unset connection_timeout stays zero so the transport resolves its own default
+// dial deadline rather than lib/config restating the number.
+func TestApplyNTCP2SessionLimits_ConnectionTimeoutUnsetDefersToDefault(t *testing.T) {
+	dst := &ntcp.Config{}
+	applyNTCP2SessionLimits(dst, &config.TransportDefaults{})
+
+	assert.Equal(t, 0*time.Second, dst.ConnectionTimeout, "unset must stay unset")
+	assert.NotZero(t, dst.GetConnectionTimeout(), "the transport must resolve unset to a non-zero default")
 }
 
 // TestApplyNTCP2SessionLimits_UnsetDefersToTransport pins that a zero config

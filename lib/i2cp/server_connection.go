@@ -314,6 +314,18 @@ func (s *Server) recoverFromConnectionPanic(conn net.Conn) {
 	}
 }
 
+// recoverFromMonitoringPanic recovers from a panic in the per-session tunnel
+// monitoring goroutine so one bad session cannot crash the router process.
+func (s *Server) recoverFromMonitoringPanic(session *Session) {
+	if r := recover(); r != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.monitorTunnelsAndRequestLeaseSet",
+			"sessionID": session.ID(),
+			"panic":     r,
+		}).Error("panic_in_tunnel_monitoring_goroutine")
+	}
+}
+
 // logClientConnected logs when a client connects to the server.
 func (s *Server) logClientConnected(conn net.Conn) {
 	// i2psnark compatibility: Track client connection details for debugging
@@ -833,6 +845,11 @@ func (s *Server) handleNewSessionTracking(msg *Message, sessionPtr **Session, co
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
+			// I2P-E-1: this monitoring loop runs for up to 2 minutes on its own
+			// goroutine and touches session/tunnel state; a panic here would
+			// otherwise crash the whole router process. Recover and log, matching
+			// the seam on the sibling deliverMessagesToClient goroutine.
+			defer s.recoverFromMonitoringPanic(session)
 			s.monitorTunnelsAndRequestLeaseSet(session, conn)
 		}()
 	}

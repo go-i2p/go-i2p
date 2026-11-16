@@ -945,8 +945,16 @@ func (kr *KademliaResolver) processLookupResponse(data []byte, msgType int, targ
 }
 
 // processDatabaseStoreResponse extracts a RouterInfo from a DatabaseStore message.
+//
+// A peer may answer a DatabaseLookup with a RouterInfo whose key is NOT the
+// requested target — a "foreign" record it happens to hold (this is common when
+// a peer answers opportunistically). Such a record is still a valid RouterInfo
+// worth keeping, so we store it unconditionally to grow the NetDB, but we must
+// not mistake it for the target: when the key does not match we return a nil
+// RouterInfo (and no error) so the iterative lookup keeps walking toward the
+// real target instead of terminating on the wrong record (I2P-D-2).
 func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash common.Hash) (*router_info.RouterInfo, error) {
-	dbStore, err := parseDatabaseStore(data, targetHash)
+	dbStore, err := parseDatabaseStore(data)
 	if err != nil {
 		return nil, err
 	}
@@ -961,7 +969,18 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 		return nil, oops.Errorf("failed to parse RouterInfo: %w", err)
 	}
 
+	// Store the record regardless of whether it is the target: a foreign RI is
+	// still useful for NetDB growth and DHT replication.
 	kr.NetworkDatabase.StoreRouterInfo(ri)
+
+	if dbStore.Key != targetHash {
+		log.WithFields(logger.Fields{
+			"at":       "processDatabaseStoreResponse",
+			"expected": logutil.HashPrefixPlain(targetHash),
+			"got":      logutil.HashPrefix(dbStore.Key),
+		}).Debug("DatabaseStore key mismatch; stored foreign RouterInfo, not treating as target")
+		return nil, nil
+	}
 
 	log.WithFields(logger.Fields{
 		"at":     "processDatabaseStoreResponse",
@@ -971,21 +990,14 @@ func (kr *KademliaResolver) processDatabaseStoreResponse(data []byte, targetHash
 	return &ri, nil
 }
 
-// parseDatabaseStore unmarshals and validates a DatabaseStore message against
-// the expected target hash and ensures it contains a RouterInfo.
-func parseDatabaseStore(data []byte, targetHash common.Hash) (*i2np.DatabaseStore, error) {
+// parseDatabaseStore unmarshals a DatabaseStore message and ensures it contains
+// a RouterInfo. It does NOT compare the record key against the lookup target:
+// that decision belongs to the caller, which stores foreign records but only
+// returns a matching record as the resolved target (I2P-D-2).
+func parseDatabaseStore(data []byte) (*i2np.DatabaseStore, error) {
 	var dbStore i2np.DatabaseStore
 	if err := dbStore.UnmarshalBinary(data); err != nil {
 		return nil, oops.Errorf("failed to parse DatabaseStore: %w", err)
-	}
-
-	if dbStore.Key != targetHash {
-		log.WithFields(logger.Fields{
-			"at":       "processDatabaseStoreResponse",
-			"expected": logutil.HashPrefixPlain(targetHash),
-			"got":      logutil.HashPrefix(dbStore.Key),
-		}).Warn("DatabaseStore key mismatch")
-		return nil, oops.Errorf("key mismatch in response")
 	}
 
 	if !dbStore.IsRouterInfo() {

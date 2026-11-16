@@ -1662,6 +1662,11 @@ func (s *Server) acceptAndRouteMessage(
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		// I2P-E-1: routeAsync parses/decrypts client-supplied destination data
+		// (routeMessageWithStatus) on its own goroutine with no upstream recover
+		// seam; a panic there would crash the whole router process. Recover and
+		// log so one malformed message cannot take down the server.
+		defer s.recoverFromRoutingPanic(session)
 		routeAsync(messageID)
 	}()
 
@@ -1859,6 +1864,18 @@ func (s *Server) routeMessageExpiresWithStatus(session *Session, messageID uint3
 // routeMessageWithStatus routes a message asynchronously with delivery status tracking.
 // This method is called from a goroutine and handles the complete routing flow including
 // status callbacks to notify the client of delivery success/failure.
+// recoverFromRoutingPanic recovers from a panic in the async message-routing
+// goroutine so one malformed client message cannot crash the router process.
+func (s *Server) recoverFromRoutingPanic(session *Session) {
+	if r := recover(); r != nil {
+		log.WithFields(logger.Fields{
+			"at":        "i2cp.Server.acceptAndRouteMessage",
+			"sessionID": session.ID(),
+			"panic":     r,
+		}).Error("panic_in_async_routing_goroutine")
+	}
+}
+
 func (s *Server) routeMessageWithStatus(session *Session, messageID uint32, sendMsg *SendMessagePayload) {
 	// Extract destination hash for routing
 	destHash, err := sendMsg.Destination.Hash()

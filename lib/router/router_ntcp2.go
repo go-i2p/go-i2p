@@ -54,6 +54,15 @@ func applyNTCP2SessionLimits(dst *ntcp.Config, src *config.TransportDefaults) {
 	dst.MaxSessions = src.NTCP2MaxConnections
 	dst.MaxInflightHandshakes = src.NTCP2MaxInflightHandshakes
 	dst.MaxHandshakesPerSource = src.NTCP2MaxHandshakesPerSource
+	// transport.connection_timeout bounds the TCP connect phase of an outbound
+	// dial. Zero keeps the transport's built-in default (I2P C1: this knob was
+	// previously read into config but never reached the dial).
+	dst.ConnectionTimeout = src.ConnectionTimeout
+	// transport.idle_timeout seeds the adaptive idle-expire window (clamped to
+	// protocol bounds by the transport). Zero keeps the built-in default
+	// (I2P C1: this knob was previously read into config but never reached the
+	// idle reaper).
+	dst.IdleTimeout = src.IdleTimeout
 }
 
 // createNTCP2TransportInstance creates and configures the NTCP2 transport with peer tracking.

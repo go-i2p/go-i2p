@@ -321,7 +321,11 @@ func buildTransportInstance(config *Config, identity router_info.RouterInfo, key
 	}
 	// Initialize atomic.Pointer[Config] with Store
 	t.config.Store(config)
-	atomic.StoreInt64(&t.idleExpireWriteTime, int64(ntcp2MaxExpireIdleTime))
+	// Seed the adaptive idle-expire window from the operator's
+	// transport.idle_timeout (clamped to the protocol bounds). Previously this
+	// always started at the built-in maximum, so the knob never reached the idle
+	// reaper (I2P C1). The window still adapts up/down with capacity from here.
+	atomic.StoreInt64(&t.idleExpireWriteTime, int64(config.GetIdleTimeout()))
 	return t
 }
 
@@ -2236,9 +2240,11 @@ func (t *NTCP2Transport) logTCPConnectionAttempt(tcpAddrString string, peerHashB
 func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString string, peerHashBytes []byte, config *ntcp2.Config, tcpDialStart time.Time) (*ntcp2.Conn, error) {
 	t.logger.WithField("remote_addr", ntcp2Addr.String()).Debug("Dialing NTCP2 connection")
 
-	// Phase 1a: TCP dial with a 10 s deadline (P0.2: reduced from 30 s to avoid
-	// blocking goroutines for 30 s against hosts that silently drop SYN packets).
-	dialCtx, dialCancel := context.WithTimeout(t.ctx, tcpDialTimeout)
+	// Phase 1a: TCP dial with a deadline. The default is 10 s (P0.2: reduced from
+	// 30 s to avoid blocking goroutines against hosts that silently drop SYN
+	// packets), but the operator can override it via transport.connection_timeout
+	// (I2P C1: this knob previously never reached the dial).
+	dialCtx, dialCancel := context.WithTimeout(t.ctx, t.config.Load().GetConnectionTimeout())
 	defer dialCancel()
 	tcpDialer := &net.Dialer{}
 	tcpConn, err := tcpDialer.DialContext(dialCtx, "tcp", tcpAddrString)

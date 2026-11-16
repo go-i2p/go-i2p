@@ -50,7 +50,47 @@ type Config struct {
 	// come from one source IP. Zero selects [DefaultMaxHandshakesPerSource]; a
 	// negative value disables the per-source bound.
 	MaxHandshakesPerSource int
+	// ConnectionTimeout bounds the TCP connect phase of an outbound handshake.
+	// Zero selects the built-in default (tcpDialTimeout). A shorter value frees
+	// the dialing goroutine sooner against hosts that silently drop SYNs; a
+	// longer value tolerates slower peers. This is the operator-tunable form of
+	// transport.connection_timeout (I2P C1: the knob previously never reached the
+	// dial, so the transport always used the hardcoded constant).
+	ConnectionTimeout time.Duration
+	// IdleTimeout seeds the adaptive idle-expire window: a session with no
+	// activity for at least this long is terminated. The value is clamped to the
+	// protocol's [ntcp2MinExpireIdleTime, ntcp2MaxExpireIdleTime] bounds, and the
+	// window still adapts up/down with capacity from this seed. Zero selects the
+	// built-in default (ntcp2MaxExpireIdleTime). This is the operator-tunable form
+	// of transport.idle_timeout (I2P C1: the knob previously never reached the
+	// idle reaper).
+	IdleTimeout time.Duration
 	*ntcp2.Config
+}
+
+// GetConnectionTimeout returns the effective TCP connect timeout for outbound
+// dials. Zero selects the built-in default (tcpDialTimeout).
+func (c *Config) GetConnectionTimeout() time.Duration {
+	if c == nil || c.ConnectionTimeout <= 0 {
+		return tcpDialTimeout
+	}
+	return c.ConnectionTimeout
+}
+
+// GetIdleTimeout returns the effective idle-expire seed, clamped to the
+// protocol's [ntcp2MinExpireIdleTime, ntcp2MaxExpireIdleTime] bounds. Zero
+// selects the built-in default (ntcp2MaxExpireIdleTime).
+func (c *Config) GetIdleTimeout() time.Duration {
+	if c == nil || c.IdleTimeout <= 0 {
+		return ntcp2MaxExpireIdleTime
+	}
+	if c.IdleTimeout < ntcp2MinExpireIdleTime {
+		return ntcp2MinExpireIdleTime
+	}
+	if c.IdleTimeout > ntcp2MaxExpireIdleTime {
+		return ntcp2MaxExpireIdleTime
+	}
+	return c.IdleTimeout
 }
 
 // GetMaxInflightHandshakes returns the effective inbound handshake concurrency

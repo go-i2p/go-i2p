@@ -824,19 +824,7 @@ type forwardWork struct {
 // It collects resolved work under the lock, then forwards messages after releasing the lock
 // to avoid holding pendingMutex during potentially blocking network I/O.
 func (gr *GarlicMessageRouter) retryPendingLookups() {
-	var work []forwardWork
-
-	// Phase 1: Resolve LeaseSets and collect work under lock
-	gr.pendingMutex.Lock()
-	now := time.Now()
-
-	for destHash, messages := range gr.pendingMsgs {
-		fw := gr.tryResolvePendingDest(destHash, messages, now)
-		if fw != nil {
-			work = append(work, *fw)
-		}
-	}
-	gr.pendingMutex.Unlock()
+	work := gr.collectResolvedPendingWork()
 
 	// Phase 2: Forward messages outside the lock (may block on network I/O)
 	for _, fw := range work {
@@ -846,6 +834,30 @@ func (gr *GarlicMessageRouter) retryPendingLookups() {
 		}).Debug("LeaseSet found, processing pending messages")
 		gr.forwardPendingMessages(fw.destHash, fw.gatewayHash, fw.tunnelID, fw.messages)
 	}
+}
+
+// collectResolvedPendingWork runs Phase 1 of retryPendingLookups: it resolves
+// LeaseSets and collects forwarding work while holding pendingMutex. The unlock
+// is deferred so that a panic inside tryResolvePendingDest — which parses and
+// decrypts a remote-supplied LeaseSet via buildForwardWork — releases the mutex
+// before the panic reaches the caller's recover seam. Without the deferred
+// unlock, one recovered panic would leave pendingMutex permanently held and
+// wedge the pending-message processor (and every queuePendingMessage caller)
+// forever (I2P-B-2).
+func (gr *GarlicMessageRouter) collectResolvedPendingWork() []forwardWork {
+	var work []forwardWork
+
+	gr.pendingMutex.Lock()
+	defer gr.pendingMutex.Unlock()
+	now := time.Now()
+
+	for destHash, messages := range gr.pendingMsgs {
+		fw := gr.tryResolvePendingDest(destHash, messages, now)
+		if fw != nil {
+			work = append(work, *fw)
+		}
+	}
+	return work
 }
 
 // tryResolvePendingDest attempts to resolve a pending destination's LeaseSet.
