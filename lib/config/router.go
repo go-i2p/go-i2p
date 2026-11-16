@@ -74,6 +74,11 @@ type RouterConfig struct {
 	// on every RouterInfo publish. Empty disables the file.
 	// Default: <working_dir>/router.info
 	RouterInfoFile string
+	// MessageExpirationTime is how long a freshly created outbound I2NP message
+	// stays deliverable (router.message_expiration_time). It sets the TTL stamped
+	// on new messages at creation. Zero falls back to the built-in default.
+	// Default: 60s.
+	MessageExpirationTime time.Duration
 	// netdb configuration
 	NetDB *NetDBConfig
 	// configuration for bootstrapping into the network
@@ -283,6 +288,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 		WorkingDir:                src.WorkingDir,
 		RouterInfoFile:            src.RouterInfoFile,
 		RouterInfoRefreshInterval: src.RouterInfoRefreshInterval,
+		MessageExpirationTime:     src.MessageExpirationTime,
 		MaxConcurrentSessions:     src.MaxConcurrentSessions,
 		MaxBandwidth:              src.MaxBandwidth,
 		MaxBandwidthIn:            src.MaxBandwidthIn,

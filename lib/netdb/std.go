@@ -94,6 +94,19 @@ type StdNetDB struct {
 	// leaseSetCleanupInterval.
 	expirationCheckInterval time.Duration
 
+	// leaseSetRefreshThreshold is the remaining lease lifetime at which a cached
+	// LeaseSet is proactively refreshed (netdb.lease_set_refresh_threshold). When
+	// a cache hit has less than this much lifetime left, getLeaseSetFromCache
+	// serves the entry but schedules a background network refresh so the entry is
+	// renewed before it expires. Zero disables refresh-ahead (serve until hard
+	// expiry). Set via SetLeaseSetRefreshThreshold.
+	leaseSetRefreshThreshold time.Duration
+
+	// leaseSetRefreshAt records the last time a background refresh was scheduled
+	// per LeaseSet hash, to avoid a refresh storm when a soon-to-expire LeaseSet
+	// is looked up repeatedly.
+	leaseSetRefreshAt sync.Map
+
 	// Cleanup goroutine management
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -290,6 +303,58 @@ func (db *StdNetDB) SetLeaseSetNetworkLookup(lookup func(hash common.Hash) bool)
 	db.leaseSetLookupMu.Lock()
 	db.leaseSetNetworkLookup = lookup
 	db.leaseSetLookupMu.Unlock()
+}
+
+// SetLeaseSetRefreshThreshold sets the remaining-lease lifetime at which a
+// cached LeaseSet is proactively refreshed (netdb.lease_set_refresh_threshold).
+// A non-positive value disables refresh-ahead, so a cached LeaseSet is served
+// until it hard-expires. Before this the operator's value was validated but
+// never reached behavior (C1 dead knob).
+func (db *StdNetDB) SetLeaseSetRefreshThreshold(threshold time.Duration) {
+	db.leaseSetRefreshThreshold = threshold
+}
+
+// GetLeaseSetRefreshThreshold returns the configured refresh-ahead threshold.
+// Primarily for testing and observability.
+func (db *StdNetDB) GetLeaseSetRefreshThreshold() time.Duration {
+	return db.leaseSetRefreshThreshold
+}
+
+// maybeScheduleLeaseSetRefresh schedules a background network refresh for a
+// cached LeaseSet whose remaining lifetime has fallen below the configured
+// threshold. It is best-effort and rate-limited: at most one refresh per hash
+// per threshold window, and only when a network lookup callback is installed.
+// The freshly-served (still-valid) entry is returned to the caller immediately;
+// the refresh only renews the cache for subsequent lookups.
+func (db *StdNetDB) maybeScheduleLeaseSetRefresh(hash common.Hash, expiry time.Time) {
+	threshold := db.leaseSetRefreshThreshold
+	if threshold <= 0 {
+		return
+	}
+	now := time.Now()
+	if expiry.After(now.Add(threshold)) {
+		return // more than "threshold" of lifetime left; no refresh needed
+	}
+	// Rate-limit: skip if a refresh was scheduled for this hash within the last
+	// threshold window.
+	if prev, ok := db.leaseSetRefreshAt.Load(hash); ok {
+		if prevTime, ok := prev.(time.Time); ok && now.Sub(prevTime) < threshold {
+			return
+		}
+	}
+	db.leaseSetRefreshAt.Store(hash, now)
+
+	db.leaseSetLookupMu.RLock()
+	lookup := db.leaseSetNetworkLookup
+	db.leaseSetLookupMu.RUnlock()
+	if lookup == nil {
+		return
+	}
+	go func() {
+		if lookup(hash) {
+			log.WithField("hash", logutil.HashPrefixPlain(hash)).Debug("LeaseSet refresh-ahead succeeded")
+		}
+	}()
 }
 
 // tryNetworkLeaseSetLookup invokes the configured network LeaseSet lookup for

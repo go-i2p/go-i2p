@@ -14,6 +14,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
 	ssu2 "github.com/go-i2p/go-i2p/lib/transport/ssu2"
+	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	ntcp2 "github.com/go-i2p/go-noise/ntcp2"
 	ssu2noise "github.com/go-i2p/go-noise/ssu2"
@@ -133,6 +134,30 @@ func (r *Router) mainloop() {
 // initializeCoreComponents initializes NetDB, I2CP, and I2PControl servers in order.
 // Returns an error if any critical component fails to start.
 func (r *Router) initializeCoreComponents() error {
+	// Honor router.message_expiration_time as the TTL stamped on freshly created
+	// outbound I2NP messages. Before this the value was validated but never
+	// reached behavior — every message used the hardcoded defaultI2NPMessageTTL
+	// constant (C1 dead knob). Zero/unset falls back to the built-in default.
+	if r.cfg != nil {
+		i2np.SetOutboundMessageTTL(r.cfg.MessageExpirationTime)
+	}
+	// Honor transport.max_message_size as the inbound I2NP payload cap enforced
+	// before allocation. Before this the value was validated but never reached
+	// behavior (C1 dead knob). Zero/unset means no cap.
+	if r.cfg != nil && r.cfg.Transport != nil {
+		i2np.SetMaxInboundMessageSize(r.cfg.Transport.MaxMessageSize)
+	}
+	// Honor performance.fragment_cache_size as the default concurrent-fragment-
+	// assembly cap for newly created tunnel endpoints, and
+	// performance.garlic_encryption_cache_size as the active-garlic-session cap
+	// for newly created garlic session managers. Before this both values were
+	// validated but never reached behavior (C1 dead knobs). Zero/unset selects
+	// the built-in defaults.
+	if r.cfg != nil && r.cfg.Performance != nil {
+		tunnel.SetFragmentCacheSize(r.cfg.Performance.FragmentCacheSize)
+		i2np.SetGarlicEncryptionCacheSize(r.cfg.Performance.GarlicEncryptionCacheSize)
+	}
+
 	if err := r.initializeNetDB(); err != nil {
 		log.WithError(err).Error("Failed to initialize NetDB")
 		return oops.Wrapf(err, "NetDB initialization failed")

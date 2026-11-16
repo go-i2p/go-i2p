@@ -125,6 +125,76 @@ func generateRandomMessageID() (int, error) {
 	return int(binary.BigEndian.Uint32(msgIDBytes)), nil
 }
 
+// outboundMessageTTL is the lifetime stamped on freshly created outbound I2NP
+// messages. It defaults to defaultI2NPMessageTTL and is overridden at router
+// startup from router.message_expiration_time (C1: the knob previously never
+// reached behavior — every message used the hardcoded constant). Guarded by
+// outboundMessageTTLmu because it is read on every message creation while the
+// router sets it once during startup.
+var (
+	outboundMessageTTL   = defaultI2NPMessageTTL
+	outboundMessageTTLmu sync.RWMutex
+)
+
+// SetOutboundMessageTTL sets the TTL applied to newly created outbound I2NP
+// messages. A non-positive value leaves the current TTL unchanged, so callers
+// passing an unset (zero) config value fall back to the built-in default.
+// Called from router startup with router.message_expiration_time.
+func SetOutboundMessageTTL(ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
+	outboundMessageTTLmu.Lock()
+	outboundMessageTTL = ttl
+	outboundMessageTTLmu.Unlock()
+}
+
+// GetOutboundMessageTTL returns the TTL currently applied to new outbound I2NP
+// messages. Primarily for testing and observability.
+func GetOutboundMessageTTL() time.Duration {
+	outboundMessageTTLmu.RLock()
+	defer outboundMessageTTLmu.RUnlock()
+	return outboundMessageTTL
+}
+
+// ResetOutboundMessageTTLForTest restores the built-in default TTL. Used by
+// tests that call SetOutboundMessageTTL so they do not leak global state.
+func ResetOutboundMessageTTLForTest() {
+	outboundMessageTTLmu.Lock()
+	outboundMessageTTL = defaultI2NPMessageTTL
+	outboundMessageTTLmu.Unlock()
+}
+
+// maxInboundMessageSize is the largest I2NP payload (in bytes) accepted on the
+// wire. It is set at router startup from transport.max_message_size (C1: the
+// knob previously never reached behavior — oversized inbound messages were
+// allocated and parsed unconditionally). Zero means "no cap" so a default or
+// unset value does not reject messages until the router installs a limit.
+// Guarded by maxInboundMessageSizeMu because it is read on every inbound parse.
+var (
+	maxInboundMessageSize   int
+	maxInboundMessageSizeMu sync.RWMutex
+)
+
+// SetMaxInboundMessageSize sets the largest I2NP payload accepted on the wire.
+// A non-positive value clears the cap (no limit). Called from router startup
+// with transport.max_message_size.
+func SetMaxInboundMessageSize(bytes int) {
+	maxInboundMessageSizeMu.Lock()
+	if bytes <= 0 {
+		bytes = 0
+	}
+	maxInboundMessageSize = bytes
+	maxInboundMessageSizeMu.Unlock()
+}
+
+// GetMaxInboundMessageSize returns the current inbound payload cap (0 = no cap).
+func GetMaxInboundMessageSize() int {
+	maxInboundMessageSizeMu.RLock()
+	defer maxInboundMessageSizeMu.RUnlock()
+	return maxInboundMessageSize
+}
+
 // NewBaseI2NPMessage creates a new base I2NP message.
 // Panics if the system CSPRNG is unavailable. An I2P router cannot safely
 // generate message IDs without a cryptographically secure source of randomness;
@@ -137,7 +207,7 @@ func NewBaseI2NPMessage(msgType int) *BaseI2NPMessage {
 	return &BaseI2NPMessage{
 		type_:      msgType,
 		messageID:  msgID,
-		expiration: time.Now().Add(defaultI2NPMessageTTL),
+		expiration: time.Now().Add(GetOutboundMessageTTL()),
 		data:       []byte{},
 	}
 }
@@ -383,6 +453,13 @@ func (m *BaseI2NPMessage) UnmarshalBinary(data []byte) error {
 
 	// Parse size
 	size := int(data[I2NPSizeFieldOffset])<<I2NPSizeFieldShift | int(data[I2NPSizeFieldOffset+1])
+
+	// Enforce the operator-configured inbound size cap (transport.max_message_size)
+	// before allocating the payload, so a peer advertising an oversized message
+	// cannot force an unbounded allocation. A zero cap means no limit.
+	if cap := GetMaxInboundMessageSize(); cap > 0 && size > cap {
+		return oops.Errorf("i2np message too large: %d bytes exceeds max_message_size %d", size, cap)
+	}
 
 	// Parse checksum
 	expectedChecksum := data[I2NPChecksumOffset]

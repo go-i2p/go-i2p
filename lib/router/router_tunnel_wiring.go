@@ -732,12 +732,22 @@ func (r *Router) initializeGarlicRouter() {
 		tunnelPool = r.tunnelManager.GetOutboundPool()
 	}
 
-	// Create garlic message router with router infrastructure
-	gr := NewGarlicMessageRouter(
+	// Create garlic message router with router infrastructure. The drain worker
+	// pool size and queue depth are fed from performance.worker_pool_size and
+	// performance.message_queue_size (C1: these knobs previously never reached
+	// behavior). Zero/unset selects the built-in defaults.
+	var workerPoolSize, queueBuffer int
+	if r.cfg != nil && r.cfg.Performance != nil {
+		workerPoolSize = r.cfg.Performance.WorkerPoolSize
+		queueBuffer = r.cfg.Performance.MessageQueueSize
+	}
+	gr := NewGarlicMessageRouterWithLimits(
 		garlicNetDB,         // NetDB for LeaseSet/RouterInfo lookups
 		r.transports.Load(), // Transport for sending to peer routers
 		tunnelPool,          // Tunnel pool for DESTINATION and TUNNEL delivery
 		routerHash,          // Our identity for reflexive routing
+		workerPoolSize,      // performance.worker_pool_size
+		queueBuffer,         // performance.message_queue_size
 	)
 
 	// Set bidirectional references for LOCAL delivery recursion

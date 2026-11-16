@@ -370,6 +370,14 @@ func (db *StdNetDB) getLeaseSetFromCache(hash common.Hash) chan lease_set.LeaseS
 		return emptyLeaseSetChannel()
 	}
 
+	// Refresh-ahead (netdb.lease_set_refresh_threshold): if this cached LeaseSet
+	// is within the configured threshold of expiring, schedule a background
+	// network refresh so it is renewed before it goes stale. The still-valid
+	// entry is served immediately; the refresh only benefits later lookups.
+	if expiry, ok := db.lsCache.getExpiry(hash); ok {
+		db.maybeScheduleLeaseSetRefresh(hash, expiry)
+	}
+
 	log.WithFields(logger.Fields{"at": "getLeaseSetFromCache"}).Debug("LeaseSet found in memory cache")
 	return leaseSetChannel(*entry.LeaseSet)
 }

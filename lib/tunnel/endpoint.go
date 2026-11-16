@@ -56,6 +56,7 @@ type Endpoint struct {
 	forwarderMu     sync.RWMutex // protects forwarder field
 	fragmentsMutex  sync.Mutex
 	fragments       map[uint32]*fragmentAssembler
+	maxAssemblies   int // concurrent-assembly cap (performance.fragment_cache_size)
 	fragmentTimeout time.Duration
 	stopChan        chan struct{}
 	stopOnce        sync.Once      // ensures Stop() is safe to call multiple times
@@ -129,6 +130,7 @@ func NewEndpoint(tunnelID TunnelID, decryption tunnel.TunnelEncryptor, handler M
 		decryption:      decryption,
 		handler:         handler,
 		fragments:       make(map[uint32]*fragmentAssembler),
+		maxAssemblies:   GetFragmentCacheSize(), // performance.fragment_cache_size (built-in default when unset)
 		fragmentTimeout: defaultFragmentTimeout, // matches i2pd I2NP_MESSAGE_EXPIRATION_TIMEOUT
 		stopChan:        make(chan struct{}),
 	}
@@ -474,9 +476,45 @@ func (e *Endpoint) storeFirstFragmentWithDI(msgID uint32, deliveryType byte, di 
 // If a first fragment was already recorded, the delivery type cannot be changed.
 // This prevents a compromised gateway from altering delivery routing mid-reassembly.
 // Note: Caller must hold fragmentsMutex.
-// maxConcurrentAssemblies limits the number of in-progress fragment
-// assemblies to prevent memory exhaustion from fragment-flood attacks.
+// maxConcurrentAssemblies is the built-in cap on in-progress fragment
+// assemblies (prevents memory exhaustion from fragment-flood attacks) used when
+// no operator value is configured.
 const maxConcurrentAssemblies = 5000
+
+// fragmentCacheSize is the package-level default for a new Endpoint's
+// concurrent-assembly cap. It is set at router startup from
+// performance.fragment_cache_size (C1: the knob previously never reached
+// behavior — every endpoint used the hardcoded maxConcurrentAssemblies). Zero
+// selects the built-in default. Guarded by fragmentCacheSizeMu because it is
+// read at endpoint construction while the router sets it once during startup.
+var (
+	fragmentCacheSize   int
+	fragmentCacheSizeMu sync.RWMutex
+)
+
+// SetFragmentCacheSize sets the default concurrent-fragment-assembly cap for
+// newly created Endpoints. A non-positive value selects the built-in default.
+// Called from router startup with performance.fragment_cache_size. Existing
+// endpoints keep the cap they were created with.
+func SetFragmentCacheSize(size int) {
+	fragmentCacheSizeMu.Lock()
+	if size <= 0 {
+		size = 0
+	}
+	fragmentCacheSize = size
+	fragmentCacheSizeMu.Unlock()
+}
+
+// GetFragmentCacheSize returns the effective default assembly cap (built-in when
+// unset). Primarily for testing and observability.
+func GetFragmentCacheSize() int {
+	fragmentCacheSizeMu.RLock()
+	defer fragmentCacheSizeMu.RUnlock()
+	if fragmentCacheSize > 0 {
+		return fragmentCacheSize
+	}
+	return maxConcurrentAssemblies
+}
 
 func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) (*fragmentAssembler, error) {
 	assembler, exists := e.fragments[msgID]
@@ -517,13 +555,19 @@ func (e *Endpoint) ensureAssemblerExists(msgID uint32, deliveryType byte) (*frag
 // the concurrent assemblies cap to prevent memory exhaustion DoS.
 // If the cap is reached, it evicts the oldest incomplete assembly first.
 func (e *Endpoint) createAssemblerWithCapEnforcement(msgID uint32, deliveryType byte) *fragmentAssembler {
-	// Enforce cap on concurrent assemblies to prevent memory exhaustion
-	if len(e.fragments) >= maxConcurrentAssemblies {
+	// Enforce cap on concurrent assemblies to prevent memory exhaustion. The cap
+	// is per-endpoint (performance.fragment_cache_size), falling back to the
+	// built-in maxConcurrentAssemblies when unset.
+	limit := e.maxAssemblies
+	if limit <= 0 {
+		limit = maxConcurrentAssemblies
+	}
+	if len(e.fragments) >= limit {
 		log.WithFields(map[string]interface{}{
 			"at":    "createAssemblerWithCapEnforcement",
 			"msgID": msgID,
 			"count": len(e.fragments),
-			"max":   maxConcurrentAssemblies,
+			"max":   limit,
 		}).Debug("fragment assembly limit reached, evicting oldest")
 		e.evictOldestFragment()
 	}

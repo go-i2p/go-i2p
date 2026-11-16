@@ -270,6 +270,7 @@ func NewRouterConfigFromViper() (*RouterConfig, error) {
 		WorkingDir:                viper.GetString("working_dir"),
 		RouterInfoFile:            viper.GetString("router.router_info_file"),
 		RouterInfoRefreshInterval: viper.GetDuration("router.info_refresh_interval"),
+		MessageExpirationTime:     viper.GetDuration("router.message_expiration_time"),
 		NetDB:                     buildNetDBConfig(),
 		Bootstrap:                 bootstrap,
 		I2CP:                      buildI2CPConfig(),

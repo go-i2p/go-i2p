@@ -35,6 +35,37 @@ type GarlicSessionManager struct {
 	oneTimeDiag   map[[8]byte]struct{}
 }
 
+// garlicEncryptionCacheSize is the package-level cap on active garlic sessions
+// per manager, set at router startup from performance.garlic_encryption_cache_size
+// (C1: the knob previously never reached behavior — every manager used go-noise's
+// hardcoded MaxGarlicSessions). Zero selects go-noise's built-in default.
+// Guarded by garlicEncryptionCacheSizeMu because it is read at manager
+// construction while the router sets it once during startup.
+var (
+	garlicEncryptionCacheSize   int
+	garlicEncryptionCacheSizeMu sync.RWMutex
+)
+
+// SetGarlicEncryptionCacheSize sets the active-garlic-session cap applied to
+// newly created GarlicSessionManagers. A non-positive value selects go-noise's
+// built-in default. Called from router startup with
+// performance.garlic_encryption_cache_size.
+func SetGarlicEncryptionCacheSize(size int) {
+	garlicEncryptionCacheSizeMu.Lock()
+	if size < 0 {
+		size = 0
+	}
+	garlicEncryptionCacheSize = size
+	garlicEncryptionCacheSizeMu.Unlock()
+}
+
+// GetGarlicEncryptionCacheSize returns the configured cap (0 = go-noise default).
+func GetGarlicEncryptionCacheSize() int {
+	garlicEncryptionCacheSizeMu.RLock()
+	defer garlicEncryptionCacheSizeMu.RUnlock()
+	return garlicEncryptionCacheSize
+}
+
 // NewGarlicSessionManager creates a new garlic session manager with the given private key.
 // The private key is used for decrypting New Session messages.
 func NewGarlicSessionManager(privateKey [32]byte) (*GarlicSessionManager, error) {
@@ -42,7 +73,12 @@ func NewGarlicSessionManager(privateKey [32]byte) (*GarlicSessionManager, error)
 		"at": "NewGarlicSessionManager",
 	}).Debug("Creating new garlic session manager")
 
-	inner, err := noiseratchet.NewSessionManager(privateKey)
+	var opts []noiseratchet.SessionManagerOption
+	if limit := GetGarlicEncryptionCacheSize(); limit > 0 {
+		opts = append(opts, noiseratchet.WithMaxSessions(limit))
+	}
+
+	inner, err := noiseratchet.NewSessionManager(privateKey, opts...)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to create session manager")
 	}
@@ -59,7 +95,12 @@ func GenerateGarlicSessionManager() (*GarlicSessionManager, error) {
 		"at": "GenerateGarlicSessionManager",
 	}).Debug("Generating new garlic session manager with fresh key pair")
 
-	inner, err := noiseratchet.GenerateSessionManager()
+	var opts []noiseratchet.SessionManagerOption
+	if limit := GetGarlicEncryptionCacheSize(); limit > 0 {
+		opts = append(opts, noiseratchet.WithMaxSessions(limit))
+	}
+
+	inner, err := noiseratchet.GenerateSessionManager(opts...)
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to generate session manager")
 	}

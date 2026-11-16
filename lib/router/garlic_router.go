@@ -114,7 +114,19 @@ type GarlicMessageRouter struct {
 	// Channel draining worker pool
 	drainRequests      chan drainRequest // Bounded channel for drain requests
 	fallbackDrainCount atomic.Int64      // Counts fallback drain activations for observability
+
+	// workerPoolSize / queueBuffer record the effective pool sizing (from
+	// performance.worker_pool_size / performance.message_queue_size) so it can be
+	// observed and tested. They are set once at construction.
+	workerPoolSize int
+	queueBuffer    int
 }
+
+// WorkerPoolSize returns the number of drain workers this router started.
+// GetQueueBuffer returns the drain-request channel capacity. Both are primarily
+// for testing and observability.
+func (gr *GarlicMessageRouter) WorkerPoolSize() int { return gr.workerPoolSize }
+func (gr *GarlicMessageRouter) QueueBuffer() int    { return gr.queueBuffer }
 
 // NewGarlicMessageRouter creates a new garlic message router with required dependencies.
 // All parameters are required for full functionality:
@@ -128,7 +140,32 @@ func NewGarlicMessageRouter(
 	tunnelPool *tunnel.Pool,
 	routerIdentity common.Hash,
 ) *GarlicMessageRouter {
+	return NewGarlicMessageRouterWithLimits(netdb, transportMgr, tunnelPool, routerIdentity, 0, 0)
+}
+
+// NewGarlicMessageRouterWithLimits is NewGarlicMessageRouter with operator-tuned
+// pool sizing. workerPoolSize sets the number of concurrent drain workers and
+// queueBuffer sets the drain-request channel depth; a non-positive value for
+// either selects the built-in default (maxDrainWorkers / drainRequestBuffer).
+// These back performance.worker_pool_size and performance.message_queue_size
+// (C1: the knobs previously never reached behavior). The limits must be supplied
+// at construction because the worker pool and channel are created once here.
+func NewGarlicMessageRouterWithLimits(
+	netdb GarlicNetDB,
+	transportMgr *transport.TransportMuxer,
+	tunnelPool *tunnel.Pool,
+	routerIdentity common.Hash,
+	workerPoolSize int,
+	queueBuffer int,
+) *GarlicMessageRouter {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	if workerPoolSize <= 0 {
+		workerPoolSize = maxDrainWorkers
+	}
+	if queueBuffer <= 0 {
+		queueBuffer = drainRequestBuffer
+	}
 
 	gr := &GarlicMessageRouter{
 		netdb:          netdb,
@@ -138,11 +175,13 @@ func NewGarlicMessageRouter(
 		pendingMsgs:    make(map[common.Hash][]pendingMessage),
 		ctx:            ctx,
 		cancel:         cancel,
-		drainRequests:  make(chan drainRequest, drainRequestBuffer),
+		drainRequests:  make(chan drainRequest, queueBuffer),
+		workerPoolSize: workerPoolSize,
+		queueBuffer:    queueBuffer,
 	}
 
 	// Start bounded pool of drain workers
-	for i := 0; i < maxDrainWorkers; i++ {
+	for i := 0; i < workerPoolSize; i++ {
 		gr.wg.Add(1)
 		go func() {
 			defer gr.wg.Done()
