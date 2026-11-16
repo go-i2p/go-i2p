@@ -1,7 +1,9 @@
 package tunnel
 
 import (
+	"bytes"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -56,6 +58,25 @@ type Participant struct {
 
 	// nextHopTunnel is the tunnel ID at the next hop for routing (0 = direct to router)
 	nextHopTunnel TunnelID
+
+	// ivHistory is the per-tunnel IV-bloom (duplicate-delivery suppression)
+	// mandated by the I2P Tunnel-Implementation spec, Participant Processing.
+	// A 256-entry table indexed by the first IV byte; each slot holds the last
+	// 16-byte IV seen in that bucket. A record whose IV equals the stored IV for
+	// its bucket is a duplicate and is dropped. For random IVs this is exact;
+	// it degrades to a probabilistic bloom (may miss a duplicate whose bucket
+	// was overwritten) — acceptable for a DoS mitigation. Without it, a previous
+	// hop can replay the same record indefinitely and every downstream hop
+	// re-processes it (the duplicate-delivery DoS primitive).
+	//
+	// Guarded by ivHistoryMu: a participant can process records concurrently.
+	ivHistory   [256][TunnelIVSize]byte
+	ivHistoryMu sync.Mutex
+	// ivHistorySeeded tracks whether each bucket holds a real IV (vs the zero
+	// value), so an all-zero IV on the wire is not falsely rejected on first use.
+	ivHistorySeeded [256]bool
+	// duplicateIVs counts records dropped by the IV-bloom, for observability.
+	duplicateIVs atomic.Uint64
 }
 
 var (
@@ -64,7 +85,45 @@ var (
 
 	// ErrInvalidParticipantData is returned when tunnel data is malformed
 	ErrInvalidParticipantData = errors.New("invalid participant tunnel data")
+
+	// ErrDuplicateTunnelRecord is returned when a transit record's IV was
+	// already seen on this tunnel (IV-bloom duplicate-delivery suppression).
+	// The caller should drop the record silently; it is not a protocol error.
+	ErrDuplicateTunnelRecord = errors.New("duplicate tunnel record (IV-bloom)")
 )
+
+// isDuplicateIV implements the per-tunnel IV-bloom: a 256-entry table indexed by
+// the first IV byte, each slot holding the last full IV seen in that bucket. It
+// returns true (and does not record) when the IV matches the stored IV for its
+// bucket — a duplicate. Otherwise it records the IV and returns false. For random
+// IVs this is exact; for adversarial IVs it degrades to a probabilistic bloom
+// (a duplicate whose bucket was overwritten by a different IV is missed), which
+// is acceptable for a DoS mitigation and matches the spec's "bloom" wording.
+//
+// Thread-safe: a participant can process records from concurrent readers.
+func (p *Participant) isDuplicateIV(iv []byte) bool {
+	if len(iv) != TunnelIVSize {
+		return false
+	}
+	bucket := iv[0]
+
+	p.ivHistoryMu.Lock()
+	defer p.ivHistoryMu.Unlock()
+
+	if p.ivHistorySeeded[bucket] && bytes.Equal(p.ivHistory[bucket][:], iv) {
+		p.duplicateIVs.Add(1)
+		return true
+	}
+	copy(p.ivHistory[bucket][:], iv)
+	p.ivHistorySeeded[bucket] = true
+	return false
+}
+
+// DuplicateIVCount returns how many records this participant has dropped via the
+// IV-bloom. Exposed for observability and tests.
+func (p *Participant) DuplicateIVCount() uint64 {
+	return p.duplicateIVs.Load()
+}
 
 // DefaultIdleTimeout is the default duration after which an idle tunnel is dropped.
 // This helps mitigate resource exhaustion attacks where attackers request
@@ -218,6 +277,23 @@ func (p *Participant) Process(encryptedData []byte) (nextHopID TunnelID, decrypt
 			"expected_min": TunnelIDSize,
 		}).Error("decrypted data too small for tunnel ID")
 		return 0, nil, ErrInvalidParticipantData
+	}
+
+	// IV-bloom duplicate-delivery suppression (I2P Tunnel-Implementation spec,
+	// Participant Processing). The decrypted record carries the 16-byte IV at
+	// bytes 4..19. A record whose IV was already seen on this tunnel is a
+	// duplicate and is dropped before forwarding, so a previous hop cannot
+	// replay one record indefinitely and make every downstream hop re-process it.
+	if len(decrypted) >= TunnelIDSize+TunnelIVSize {
+		iv := decrypted[TunnelIDSize : TunnelIDSize+TunnelIVSize]
+		if p.isDuplicateIV(iv) {
+			log.WithFields(logger.Fields{
+				"at":        "(Participant) Process",
+				"reason":    "duplicate_iv",
+				"tunnel_id": p.tunnelID,
+			}).Debug("dropped duplicate tunnel record (IV-bloom)")
+			return 0, nil, ErrDuplicateTunnelRecord
+		}
 	}
 
 	// Use the next hop tunnel ID from the build record, not from decrypted payload.

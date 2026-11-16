@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"sort"
 	"sync"
 
@@ -746,6 +747,12 @@ func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID
 	// Participant.Process returns: (nextHopID, decryptedData, error)
 	nextHopID, decrypted, err := participant.Process(fullMsg)
 	if err != nil {
+		// A duplicate IV is a benign drop (IV-bloom duplicate-delivery
+		// suppression), not a forwarding failure: the record was already
+		// processed on this tunnel. Drop it silently rather than logging an error.
+		if errors.Is(err, tunnel.ErrDuplicateTunnelRecord) {
+			return nil
+		}
 		log.WithFields(logger.Fields{
 			"at":        "handleTransitTunnelData",
 			"tunnel_id": tunnelID,
