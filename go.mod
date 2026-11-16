@@ -9,7 +9,7 @@ require (
 	github.com/go-i2p/common v0.1.70002-0.20261114233851-68e4f56429d3
 	github.com/go-i2p/crypto v0.1.70002-0.20261112185239-abff3605c696
 	github.com/go-i2p/go-nat-listener v0.1.70002-0.20261015233531-1e3cbd432928
-	github.com/go-i2p/go-noise v0.1.70002-0.20261116074947-70cb2983f689
+	github.com/go-i2p/go-noise v0.1.70002-0.20261116190345-2b80604d53b0
 	github.com/go-i2p/go-unzip v0.0.0-20260908193701-6ecb33740b07
 	github.com/go-i2p/i2p-control v0.1.70002-0.20261108045300-3db14e029991
 	github.com/go-i2p/i2ptui v0.1.70001
@@ -43,7 +43,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-i2p/elgamal v0.1.70001 // indirect
 	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f // indirect
-	github.com/go-i2p/path v0.1.70002-0.20261115025138-fd6bf4744b12 // indirect
+	github.com/go-i2p/path v0.1.70002-0.20261116190345-7e8caf31d82b // indirect
 	github.com/go-i2p/pool v0.1.70002-0.20260908223948-09bd42c580c8 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
