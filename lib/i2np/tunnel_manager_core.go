@@ -65,6 +65,7 @@ type TunnelManager struct {
 	cleanupStop      chan struct{}         // Signal to stop cleanup goroutine
 	cleanupMutex     sync.Mutex            // Protects cleanupTicker/close coordination
 	cleanupStarted   bool                  // Whether cleanup goroutine has been started (under cleanupMutex)
+	stopped          bool                  // Set by Stop() (under cleanupMutex); blocks late cleanup start
 	stopOnce         sync.Once             // Ensures Stop() is idempotent (no double-close panic)
 	replyProcessor   *ReplyProcessor       // Handles reply decryption and processing
 	// garlicKeyRegistrar receives one-time garlic keys derived from STBM Noise
@@ -161,11 +162,14 @@ func NewTunnelManager(peerSelector tunnel.PeerSelector) *TunnelManager {
 }
 
 // ensureCleanupStarted lazily starts the background cleanup goroutine.
-// Safe to call multiple times; the goroutine is started at most once.
+// Safe to call multiple times; the goroutine is started at most once. It is a
+// no-op after Stop(): a build or late reply can arrive after shutdown has begun
+// (pool Stop, in-flight reply delivery), and starting the cleanup goroutine then
+// would leak it — Stop() already fired and will never close cleanupStop again.
 func (tm *TunnelManager) ensureCleanupStarted() {
 	tm.cleanupMutex.Lock()
 	defer tm.cleanupMutex.Unlock()
-	if tm.cleanupStarted {
+	if tm.cleanupStarted || tm.stopped {
 		return
 	}
 	tm.cleanupStarted = true
@@ -194,6 +198,7 @@ func (tm *TunnelManager) SetInboundHandler(h InboundHandlerRegistrar) {
 func (tm *TunnelManager) Stop() {
 	tm.stopOnce.Do(func() {
 		tm.cleanupMutex.Lock()
+		tm.stopped = true
 		if tm.cleanupTicker != nil {
 			tm.cleanupTicker.Stop()
 		}
