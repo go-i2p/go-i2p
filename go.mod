@@ -9,7 +9,7 @@ require (
 	github.com/go-i2p/common v0.1.70002-0.20261114233851-68e4f56429d3
 	github.com/go-i2p/crypto v0.1.70002-0.20261112185239-abff3605c696
 	github.com/go-i2p/go-nat-listener v0.1.70002-0.20261015233531-1e3cbd432928
-	github.com/go-i2p/go-noise v0.1.70002-0.20261115022959-4879532a5793
+	github.com/go-i2p/go-noise v0.1.70002-0.20261116074947-70cb2983f689
 	github.com/go-i2p/go-unzip v0.0.0-20260908193701-6ecb33740b07
 	github.com/go-i2p/i2p-control v0.1.70002-0.20261108045300-3db14e029991
 	github.com/go-i2p/i2ptui v0.1.70001
@@ -86,10 +86,11 @@ retract (
 )
 
 // github.com/go-i2p/go-noise is developed alongside this repo. The require line
-// above records the published version to use once the NTCP2 data-phase fixes
-// (the AEAD padding-block boundary resolution, see the finding 006 / H-017 work)
-// land in a tag; until then the checkout supplies it.
-replace github.com/go-i2p/go-noise => ../go-noise
+// above records the published version. The local ../go-noise replace is kept
+// commented for local co-development; CI and published builds resolve the
+// require line (the replace directory does not exist in CI, so an active
+// replace there fails the build — Phase-0 hygiene).
+//replace github.com/go-i2p/go-noise => ../go-noise
 
 // github.com/go-i2p/noise is developed alongside this repo, like the sibling
 // modules replaced below. The require line above records the published version

@@ -115,6 +115,41 @@ jobs:
           name: ${{ matrix.test_target }}-logs
           path: ./test-logs/${{ matrix.test_target }}.log # Adjust this path as needed
 
+  fuzz:
+    # Short fuzzing of the C3 parse/decrypt cluster (LeaseSet2, STBM build-record
+    # crypto, garlic/ECIES decrypt, I2PControl request/auth). The seed corpora
+    # also replay in the `test` job via `go test ./...`; this job adds bounded
+    # mutation coverage so a new panic in the untrusted-input parsers is caught
+    # in CI. A panic fails the job and is uploaded as an artifact.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.26"
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-fuzz-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Fuzz parse/decrypt cluster
+        run: |
+          go test ./lib/netdb/ -run '^$' -fuzz FuzzReadLeaseSet2 -fuzztime=30s
+          go test ./lib/i2np/ -run '^$' -fuzz FuzzBuildRecordCrypto -fuzztime=30s
+          go test ./lib/i2np/ -run '^$' -fuzz FuzzGarlicDecrypt -fuzztime=30s
+          go test ./lib/i2pcontrol/ -run '^$' -fuzz FuzzI2CPControlAuth -fuzztime=30s
+        env:
+          CGO_ENABLED: 0
+
   lint:
     runs-on: ubuntu-latest
     steps:
