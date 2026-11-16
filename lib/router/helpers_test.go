@@ -122,6 +122,13 @@ func createTestRouterConfig(tmpDir string) *config.RouterConfig {
 		},
 		Bootstrap: &config.BootstrapConfig{
 			LowPeerThreshold: 0,
+			// "local" bootstraps from the (empty) on-disk netDb only, with no
+			// network round trip. The default "auto" tries a remote reseed,
+			// which on CI's restricted/slow network blocks Start() on reseed
+			// timeouts and leaves lingering network goroutines that do not
+			// settle within the restart-leak test's settle window (flaky
+			// under load). Unit-test routers must not touch the network.
+			BootstrapType: "local",
 		},
 	}
 }
