@@ -5,9 +5,17 @@ import (
 	"sync"
 	"testing"
 
+	common "github.com/go-i2p/common/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func hashWith(b byte) common.Hash {
+	var h common.Hash
+	h[0] = b
+	h[31] = b
+	return h
+}
 
 // makeTransitRecord builds a 1028-byte transit record whose decrypted form (via
 // the passthrough encryptor) carries the given 16-byte IV at bytes 4..19. The
@@ -101,4 +109,44 @@ func TestParticipant_Process_ConcurrentDuplicateIV(t *testing.T) {
 
 	assert.Equal(t, 1, accepted, "exactly one record with a given IV must be accepted")
 	assert.Equal(t, n-1, dup, "the remaining replays must be dropped as duplicates")
+}
+
+// TestParticipant_VerifySource_Pinning is the C4/I2P-B-1 guard for previous-hop
+// pinning: once a participant is pinned to its previous hop (learned from the
+// build record / delivering peer), a transit record arriving from any other peer
+// must be rejected — only the previous hop holds the layer key. An unpinned
+// participant and an unknown (zero) source are accepted, so pinning is a strict
+// tightening only where a prev-hop identity is known.
+func TestParticipant_VerifySource_Pinning(t *testing.T) {
+	p, err := NewParticipant(TunnelID(5001), &passthroughEncryptor{})
+	require.NoError(t, err)
+
+	prev := hashWith(0xAA)
+	other := hashWith(0xBB)
+
+	// Unpinned: any source accepted.
+	require.NoError(t, p.VerifySource(other), "unpinned participant must accept any source")
+
+	// Pin to the previous hop.
+	p.PinPrevHop(prev)
+
+	require.NoError(t, p.VerifySource(prev), "record from the pinned previous hop must be accepted")
+	require.NoError(t, p.VerifySource(common.Hash{}), "unknown (zero) source must be accepted")
+
+	err = p.VerifySource(other)
+	require.Error(t, err, "record from a non-pinned peer must be rejected")
+	assert.True(t, errors.Is(err, ErrWrongPrevHop), "rejection must be ErrWrongPrevHop, got %v", err)
+}
+
+// TestParticipant_PinPrevHop_ZeroLeavesUnpinned pins that a zero prev-hop hash
+// (no source attribution) leaves the participant unpinned, so a build path that
+// cannot supply the delivering peer does not accidentally reject all sources.
+func TestParticipant_PinPrevHop_ZeroLeavesUnpinned(t *testing.T) {
+	p, err := NewParticipant(TunnelID(5002), &passthroughEncryptor{})
+	require.NoError(t, err)
+
+	p.PinPrevHop(common.Hash{}) // zero must not pin
+
+	require.NoError(t, p.VerifySource(hashWith(0xCC)),
+		"zero prev-hop must leave the participant unpinned (accept any source)")
 }

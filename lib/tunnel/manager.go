@@ -616,6 +616,10 @@ func (m *ParticipantManager) RegisterParticipant(tunnelID TunnelID, sourceHash c
 		nextHopIdent:  nextHopIdent,
 		nextHopTunnel: nextHopTunnel,
 	}
+	// Pin the previous hop to the build request's source: only that router holds
+	// the layer key and may feed this tunnel. A zero sourceHash leaves the
+	// participant unpinned (any source accepted).
+	participant.PinPrevHop(sourceHash)
 	// Initialize atomic fields
 	participant.lifetime.Store(int64(lifetime))
 	participant.lastActivity.Store(now.UnixNano())

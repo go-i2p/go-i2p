@@ -125,7 +125,7 @@ func processDirectBuildRecord(t *testing.T, processor *MessageProcessor, message
 	for i := 1; i < len(raw); i++ {
 		raw[i] = byte(i % 251)
 	}
-	processor.processSingleBuildRecord(messageID, 0, record, slotCrypto, raw, I2NPMessageTypeShortTunnelBuild)
+	processor.processSingleBuildRecord(messageID, 0, record, slotCrypto, raw, I2NPMessageTypeShortTunnelBuild, common.Hash{})
 	return record
 }
 

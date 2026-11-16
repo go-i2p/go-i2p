@@ -16,6 +16,7 @@ import (
 	"github.com/go-i2p/go-i2p/lib/netdb"
 	"github.com/go-i2p/go-i2p/lib/transport"
 	ntcp "github.com/go-i2p/go-i2p/lib/transport/ntcp2"
+	"github.com/go-i2p/go-i2p/lib/tunnel/buildrecord"
 	"github.com/go-i2p/go-i2p/lib/util/logutil"
 	"github.com/samber/oops"
 
@@ -318,13 +319,25 @@ func (r *Router) dispatchByMessageType(msg i2np.Message, mr *i2np.I2NPMessageDis
 		return r.routeDatabaseLookup(msg, mr, fs)
 	case i2np.I2NPMessageTypeDatabaseSearchReply:
 		return r.routeDatabaseSearchReply(msg, mr)
+	case i2np.I2NPMessageTypeTunnelData:
+		// Thread the source peer so a transit relay can enforce previous-hop
+		// pinning (only the tunnel's previous hop may feed it). The wrapper
+		// preserves the original Message's expiration/replay behavior and adds
+		// SourceHash(); RouteMessage's expiration check and the processor's
+		// replay cache both read the embedded Message.
+		if _, ok := msg.(i2np.TunnelCarrier); ok {
+			return mr.RouteMessage(&sourcedMessage{Message: msg, source: fromPeer})
+		}
+		return mr.RouteMessage(msg)
 	case i2np.I2NPMessageTypeData, i2np.I2NPMessageTypeDeliveryStatus,
-		i2np.I2NPMessageTypeGarlic, i2np.I2NPMessageTypeTunnelData,
+		i2np.I2NPMessageTypeGarlic,
 		i2np.I2NPMessageTypeTunnelGateway:
 		return mr.RouteMessage(msg)
 	case i2np.I2NPMessageTypeVariableTunnelBuild, i2np.I2NPMessageTypeVariableTunnelBuildReply,
 		i2np.I2NPMessageTypeShortTunnelBuild, i2np.I2NPMessageTypeOutboundTunnelBuildReply:
-		return mr.GetProcessor().ProcessMessage(msg)
+		// Thread the delivering peer so an accepted participant can pin its
+		// previous hop (the build deliverer is always the previous hop).
+		return mr.GetProcessor().ProcessMessage(&sourcedMessage{Message: msg, source: fromPeer})
 	default:
 		return oops.Errorf("unsupported message type: %d", msg.Type())
 	}
@@ -351,6 +364,39 @@ type sourcedDatabaseStoreMessage struct {
 
 func (m *sourcedDatabaseStoreMessage) SourceHash() common.Hash {
 	return m.source
+}
+
+// sourcedMessage preserves the source peer hash for an inbound message so a
+// transit relay can enforce previous-hop pinning (TunnelData) and an accepted
+// participant can pin its previous hop (tunnel build). It embeds the original
+// i2np.Message (so expiration, replay-cache and all other Message behavior is
+// unchanged) and adds SourceHash(). For TunnelData it also forwards the
+// TunnelCarrier methods, which are not promoted through the embedded interface;
+// for build messages those methods are never called, so they return zero values.
+type sourcedMessage struct {
+	i2np.Message
+	source common.Hash
+}
+
+func (m *sourcedMessage) SourceHash() common.Hash {
+	return m.source
+}
+
+// GetTunnelData and GetTunnelID forward to the underlying message when it is a
+// TunnelCarrier (the methods are not promoted from the embedded i2np.Message
+// interface). A non-TunnelCarrier message (e.g. a build message) yields zero.
+func (m *sourcedMessage) GetTunnelData() []byte {
+	if tc, ok := m.Message.(i2np.TunnelCarrier); ok {
+		return tc.GetTunnelData()
+	}
+	return nil
+}
+
+func (m *sourcedMessage) GetTunnelID() buildrecord.TunnelID {
+	if tc, ok := m.Message.(i2np.TunnelCarrier); ok {
+		return tc.GetTunnelID()
+	}
+	return 0
 }
 
 // routeDatabaseLookup handles DatabaseLookup message routing with optional floodfill handling.

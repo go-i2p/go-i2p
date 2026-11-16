@@ -118,7 +118,7 @@ func TestProcessSingleBuildRecord_TunnelForwarding(t *testing.T) {
 	messageID := 1003
 	record.NextTunnel = tunnel.TunnelID(67890) // Non-zero means tunnel forwarding
 	record.SendMessageID = messageID           // echoed as the outgoing reply message ID
-	processor.processSingleBuildRecord(messageID, 0, record, slotCrypto, newSingleSlotSTBMRaw(), 25)
+	processor.processSingleBuildRecord(messageID, 0, record, slotCrypto, newSingleSlotSTBMRaw(), 25, common.Hash{})
 
 	tunnelCalls := mockForwarder.getTunnelCalls()
 	assert.Len(t, tunnelCalls, 1, "Should have one tunnel forward call")
@@ -143,7 +143,7 @@ func TestProcessSingleBuildRecord_NoForwarder(t *testing.T) {
 	record := createTestBuildRequestRecord(t)
 
 	// Execute - should not panic, just log warning
-	processor.processSingleBuildRecord(1004, 0, record, slotCrypto, newSingleSlotSTBMRaw(), 25)
+	processor.processSingleBuildRecord(1004, 0, record, slotCrypto, newSingleSlotSTBMRaw(), 25, common.Hash{})
 
 	assert.Equal(t, 1, mockParticipant.getRegisteredCount(), "Participant should still be registered")
 }
@@ -270,7 +270,7 @@ func TestMultipleBuildRecords_Processing(t *testing.T) {
 	// branch: even slots (NextTunnel==0) forward directly to the router, odd
 	// slots forward through the reply tunnel.
 	slots := []int{0, 1, 2, 3, 4}
-	processor.processAllBuildRecords(2000, records, slots, slotCrypto, raw, 25)
+	processor.processAllBuildRecords(2000, records, slots, slotCrypto, raw, 25, common.Hash{})
 
 	assert.Equal(t, 5, mockParticipant.getRegisteredCount(), "All participants should be registered")
 
@@ -319,11 +319,11 @@ func TestHandleAcceptedBuildRecord_ReturnsError(t *testing.T) {
 
 	record := createTestBuildRequestRecord(t)
 
-	err := processor.handleAcceptedBuildRecord(1, 0, record)
+	err := processor.handleAcceptedBuildRecord(1, 0, record, common.Hash{})
 	assert.NoError(t, err, "Should succeed when RegisterParticipant succeeds")
 
 	mockParticipant.registerErr = fmt.Errorf("slots full")
-	err = processor.handleAcceptedBuildRecord(2, 0, record)
+	err = processor.handleAcceptedBuildRecord(2, 0, record, common.Hash{})
 	assert.Error(t, err, "Should return error when RegisterParticipant fails")
 	assert.Contains(t, err.Error(), "RegisterParticipant failed")
 }

@@ -242,7 +242,13 @@ func (h *InboundMessageHandler) HandleTunnelData(msg i2np.Message) error {
 
 	// Check if this is a transit (participant) tunnel
 	if participant := h.getParticipant(tunnelID); participant != nil {
-		return h.handleTransitTunnelData(tunnelID, data, participant)
+		// Extract the source peer (when the dispatcher threaded it) so the
+		// transit relay can enforce previous-hop pinning.
+		var source common.Hash
+		if sp, ok := msg.(i2np.SourceHashProvider); ok {
+			source = sp.SourceHash()
+		}
+		return h.handleTransitTunnelData(tunnelID, data, participant, source)
 	}
 
 	// Otherwise, handle as inbound endpoint tunnel.
@@ -727,7 +733,7 @@ func (h *InboundMessageHandler) getParticipant(tunnelID tunnel.TunnelID) *tunnel
 // - participant: the participant tunnel that will decrypt one layer
 //
 // Returns an error if processing fails.
-func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID, data []byte, participant *tunnel.Participant) error {
+func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID, data []byte, participant *tunnel.Participant, source common.Hash) error {
 	if participant == nil {
 		log.WithFields(logger.Fields{
 			"at":        "handleTransitTunnelData",
@@ -735,6 +741,21 @@ func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID
 			"reason":    "nil_participant",
 		}).Error("participant tunnel is nil")
 		return oops.Errorf("participant tunnel is nil for tunnel %d", tunnelID)
+	}
+
+	// Previous-hop pinning: only the tunnel's previous hop holds the layer key
+	// and may feed this tunnel. Drop records arriving from any other peer.
+	// Unpinned participants and an unknown (zero) source are accepted.
+	if err := participant.VerifySource(source); err != nil {
+		if errors.Is(err, tunnel.ErrWrongPrevHop) {
+			log.WithFields(logger.Fields{
+				"at":        "handleTransitTunnelData",
+				"tunnel_id": tunnelID,
+				"reason":    "wrong_prev_hop",
+			}).Debug("dropped transit record from non-pinned source")
+			return nil
+		}
+		return oops.Wrapf(err, "previous-hop verification failed")
 	}
 
 	// Participant.Process expects exactly 1028 bytes: 4-byte tunnel ID + 1024-byte data.

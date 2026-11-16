@@ -102,7 +102,7 @@ func TestProcessAllBuildRecords_TelescopesMixedFlags(t *testing.T) {
 	records[1].SendMessageID = 22
 	records[2].SendMessageID = 33
 
-	require.NoError(t, processor.processAllBuildRecords(7000, records, []int{0, 1, 2}, slotCrypto, newThreeSlotSTBMRaw(), 25))
+	require.NoError(t, processor.processAllBuildRecords(7000, records, []int{0, 1, 2}, slotCrypto, newThreeSlotSTBMRaw(), 25, common.Hash{}))
 
 	assert.Equal(t, 3, mockParticipant.getRegisteredCount(), "all three hops participate")
 

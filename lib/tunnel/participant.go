@@ -59,6 +59,17 @@ type Participant struct {
 	// nextHopTunnel is the tunnel ID at the next hop for routing (0 = direct to router)
 	nextHopTunnel TunnelID
 
+	// prevHopIdent is the router identity of the previous hop, learned from the
+	// build record (the source that built this tunnel through us). When pinned,
+	// a transit relay rejects tunnel records that arrive from any other peer:
+	// the previous hop is the only router that holds the layer key and may feed
+	// this tunnel. Without pinning, any peer that learns the tunnel ID can inject
+	// records. Guarded by prevHopMu; zero value means "not pinned" (accept any
+	// source), so a participant built without source attribution is unchanged.
+	prevHopIdent common.Hash
+	prevHopPinned bool
+	prevHopMu     sync.RWMutex
+
 	// ivHistory is the per-tunnel IV-bloom (duplicate-delivery suppression)
 	// mandated by the I2P Tunnel-Implementation spec, Participant Processing.
 	// A 256-entry table indexed by the first IV byte; each slot holds the last
@@ -90,6 +101,11 @@ var (
 	// already seen on this tunnel (IV-bloom duplicate-delivery suppression).
 	// The caller should drop the record silently; it is not a protocol error.
 	ErrDuplicateTunnelRecord = errors.New("duplicate tunnel record (IV-bloom)")
+
+	// ErrWrongPrevHop is returned when a transit record arrives from a peer other
+	// than the tunnel's pinned previous hop (previous-hop pinning). The caller
+	// should drop the record; only the previous hop holds the layer key.
+	ErrWrongPrevHop = errors.New("transit record from wrong previous hop")
 )
 
 // isDuplicateIV implements the per-tunnel IV-bloom: a 256-entry table indexed by
@@ -123,6 +139,42 @@ func (p *Participant) isDuplicateIV(iv []byte) bool {
 // IV-bloom. Exposed for observability and tests.
 func (p *Participant) DuplicateIVCount() uint64 {
 	return p.duplicateIVs.Load()
+}
+
+// PinPrevHop records the previous-hop router identity learned from the build
+// record (the router that built this tunnel through us). Once pinned,
+// VerifySource rejects transit records arriving from any other peer. A zero
+// hash leaves the participant unpinned (any source accepted), preserving prior
+// behavior when source attribution is unavailable.
+func (p *Participant) PinPrevHop(prevHop common.Hash) {
+	if prevHop == (common.Hash{}) {
+		return
+	}
+	p.prevHopMu.Lock()
+	defer p.prevHopMu.Unlock()
+	p.prevHopIdent = prevHop
+	p.prevHopPinned = true
+}
+
+// VerifySource enforces previous-hop pinning: when the participant is pinned, a
+// transit record must arrive from the pinned previous hop — the only router that
+// holds the layer key and may legitimately feed this tunnel. Returns
+// ErrWrongPrevHop when a non-zero source disagrees with the pinned identity.
+// Unpinned participants and a zero (unknown) source are accepted, so this is a
+// strict tightening only where the build record supplied a prev-hop identity.
+func (p *Participant) VerifySource(source common.Hash) error {
+	p.prevHopMu.RLock()
+	pinned := p.prevHopPinned
+	pinnedIdent := p.prevHopIdent
+	p.prevHopMu.RUnlock()
+
+	if !pinned || source == (common.Hash{}) {
+		return nil
+	}
+	if source != pinnedIdent {
+		return ErrWrongPrevHop
+	}
+	return nil
 }
 
 // DefaultIdleTimeout is the default duration after which an idle tunnel is dropped.

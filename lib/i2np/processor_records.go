@@ -130,14 +130,28 @@ type buildRequestProcessor struct {
 	processor        *MessageProcessor
 	msg              Message
 	inputMessageType int
-	parse            func([]byte) ([]BuildRequestRecord, []int, map[int]stbmSlotCrypto, error)
+	// source is the authenticated peer that delivered the build message — the
+	// previous hop for every record we accept. Threaded to RegisterParticipant
+	// so the participant pins its previous hop (robust across build formats:
+	// STBM records carry no OurIdent, so the delivering peer is the only
+	// universally-available prev-hop identity). Zero when source attribution is
+	// unavailable, which leaves the participant unpinned.
+	source common.Hash
+	parse  func([]byte) ([]BuildRequestRecord, []int, map[int]stbmSlotCrypto, error)
 }
 
 func newBuildRequestProcessor(p *MessageProcessor, msg Message) buildRequestProcessor {
+	// Capture the delivering peer (the previous hop) when the dispatcher
+	// threaded it, so accepted participants can pin their previous hop.
+	var source common.Hash
+	if sp, ok := msg.(SourceHashProvider); ok {
+		source = sp.SourceHash()
+	}
 	return buildRequestProcessor{
 		processor:        p,
 		msg:              msg,
 		inputMessageType: msg.Type(),
+		source:           source,
 		parse: func(data []byte) ([]BuildRequestRecord, []int, map[int]stbmSlotCrypto, error) {
 			return p.parseTunnelBuildRecords(data)
 		},
@@ -167,7 +181,7 @@ func (b buildRequestProcessor) process() error {
 	}
 
 	b.processor.logParsedBuildRequest(b.msg.MessageID(), len(records))
-	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, slotIndices, slotCrypto, data, b.inputMessageType)
+	return b.processor.processAllBuildRecords(b.msg.MessageID(), records, slotIndices, slotCrypto, data, b.inputMessageType, b.source)
 }
 
 // pendingInboundBuildMatcher is optionally implemented by a
@@ -296,7 +310,7 @@ func (p *MessageProcessor) logParsedBuildRequest(messageID, recordCount int) {
 // added to the list by tryParseAndAppendRecord, so this function will be called with an
 // empty list. Callers must call SetOurRouterHash before processing any tunnel
 // build messages.
-func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, slotIndices []int, slotCrypto map[int]stbmSlotCrypto, rawData []byte, inputMessageType int) error {
+func (p *MessageProcessor) processAllBuildRecords(messageID int, records []BuildRequestRecord, slotIndices []int, slotCrypto map[int]stbmSlotCrypto, rawData []byte, inputMessageType int, source common.Hash) error {
 	var zeroHash common.Hash
 	if p.ourRouterHash == zeroHash {
 		log.WithFields(logger.Fields{
@@ -311,7 +325,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 		if i < len(slotIndices) {
 			slot = slotIndices[i]
 		}
-		p.processSingleBuildRecord(messageID, slot, record, slotCrypto, rawData, inputMessageType)
+		p.processSingleBuildRecord(messageID, slot, record, slotCrypto, rawData, inputMessageType, source)
 	}
 	return nil
 }
@@ -321,7 +335,7 @@ func (p *MessageProcessor) processAllBuildRecords(messageID int, records []Build
 // BuildResponseRecord and forwards it to the next hop.
 // inputMessageType is passed to generateAndSendBuildReply for correct reply type mapping.
 // slotCrypto carries this message's per-slot Noise-derived reply state.
-func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, slotCrypto map[int]stbmSlotCrypto, rawData []byte, inputMessageType int) {
+func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record BuildRequestRecord, slotCrypto map[int]stbmSlotCrypto, rawData []byte, inputMessageType int, source common.Hash) {
 	accepted, rejectCode, reason := p.participantManager.ProcessBuildRequest(record.OurIdent)
 
 	// availableBW is the bandwidth (KB/s) advertised back to the tunnel creator
@@ -337,7 +351,7 @@ func (p *MessageProcessor) processSingleBuildRecord(messageID, index int, record
 			rejectCode = bwReject
 			p.handleRejectedBuildRecord(messageID, index, record, rejectCode,
 				"insufficient transit bandwidth")
-		} else if err := p.handleAcceptedBuildRecord(messageID, index, record); err != nil {
+		} else if err := p.handleAcceptedBuildRecord(messageID, index, record, source); err != nil {
 			// Registration failed — send a rejection reply so the tunnel builder
 			// knows this hop is non-functional instead of a phantom success.
 			// Use the spec-sanctioned bandwidth rejection (0x03): 0x01 is a
@@ -677,7 +691,7 @@ func (p *MessageProcessor) forwardBuildReply(messageID int, record BuildRequestR
 // handleAcceptedBuildRecord logs acceptance and registers the tunnel participation.
 // Returns an error if participant registration fails, so the caller can send a
 // rejection reply instead of falsely reporting success.
-func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, record BuildRequestRecord) error {
+func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, record BuildRequestRecord, source common.Hash) error {
 	log.WithFields(logger.Fields{
 		"at":             "processTunnelBuildRequest",
 		"message_id":     messageID,
@@ -686,10 +700,20 @@ func (p *MessageProcessor) handleAcceptedBuildRecord(messageID, index int, recor
 		"target_hash":    logutil.HashPrefix(record.OurIdent),
 	}).Debug("accepting tunnel build request")
 
+	// Pin the previous hop to the peer that delivered the build message — the
+	// only router that can legitimately feed this tunnel. STBM records carry no
+	// OurIdent (zero), so the delivering peer is the only universally-available
+	// prev-hop identity; fall back to record.OurIdent when source attribution is
+	// unavailable but the record carries one.
+	prevHop := source
+	if prevHop == (common.Hash{}) {
+		prevHop = record.OurIdent
+	}
+
 	expiry := time.Now().Add(participantTunnelLifetime)
 	err := p.participantManager.RegisterParticipant(
 		record.ReceiveTunnel,
-		record.OurIdent,
+		prevHop,
 		expiry,
 		record.LayerKey,
 		record.IVKey,
