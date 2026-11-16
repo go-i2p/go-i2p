@@ -43,7 +43,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-i2p/elgamal v0.1.70001 // indirect
 	github.com/go-i2p/go-i2pcontrol v0.1.9-0.20260607233455-950087a3858f // indirect
-	github.com/go-i2p/path v0.1.70002-0.20261115010916-227c6134c18b // indirect
+	github.com/go-i2p/path v0.1.70002-0.20261115025138-fd6bf4744b12 // indirect
 	github.com/go-i2p/pool v0.1.70002-0.20260908223948-09bd42c580c8 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
