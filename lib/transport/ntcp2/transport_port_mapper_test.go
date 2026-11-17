@@ -120,6 +120,52 @@ func TestPortMapperNotInitializedForLoopback(t *testing.T) {
 	assert.Nil(t, transport.portMapperManager, "Port mapper should not be initialized for loopback address")
 }
 
+// TestPortMapperDisabledByConfig is the I2P-H-5 gate test: with
+// DisablePortMapping=true (router.upnp_enabled=false), a non-loopback bind must
+// NOT start the TCP port mapper. Before this fix NTCP2 mapped unconditionally on
+// any non-loopback bind, so the upnp_enabled knob was half-honored (SSU2 honored
+// it, NTCP2 did not).
+func TestPortMapperDisabledByConfig(t *testing.T) {
+	if os.Getenv("GO_I2P_INTEGRATION_NAT") != "" {
+		t.Skip("Skipping port mapper lifecycle test in CI: UPnP/NAT-PMP fails in action runners")
+	}
+	config, err := NewConfig("0.0.0.0:0") // non-loopback wildcard, OS-assigned port
+	require.NoError(t, err)
+	config.DisablePortMapping = true
+
+	identity, keystore := newTestIdentityAndKeystore(t)
+
+	transport, err := NewNTCP2Transport(identity, config, keystore)
+	require.NoError(t, err)
+	require.NotNil(t, transport)
+	defer transport.Close()
+
+	assert.Nil(t, transport.portMapperManager,
+		"port mapper must NOT start when DisablePortMapping=true (router.upnp_enabled=false)")
+}
+
+// TestPortMapperEnabledByConfig pins the complementary branch: a non-loopback
+// bind still starts the mapper when DisablePortMapping is left at its default
+// false, so the gate does not regress the default posture.
+func TestPortMapperEnabledByConfig(t *testing.T) {
+	if os.Getenv("GO_I2P_INTEGRATION_NAT") != "" {
+		t.Skip("Skipping port mapper lifecycle test in CI: UPnP/NAT-PMP fails in action runners")
+	}
+	config, err := NewConfig("0.0.0.0:0")
+	require.NoError(t, err)
+	// DisablePortMapping stays false (the default).
+
+	identity, keystore := newTestIdentityAndKeystore(t)
+
+	transport, err := NewNTCP2Transport(identity, config, keystore)
+	require.NoError(t, err)
+	require.NotNil(t, transport)
+	defer transport.Close()
+
+	assert.NotNil(t, transport.portMapperManager,
+		"port mapper must start on a non-loopback bind when DisablePortMapping=false")
+}
+
 // TestPortMapperCloseBeforeMapping verifies that closing the transport immediately
 // after creation (before port mapping succeeds) does not cause deadlock or panic.
 func TestPortMapperCloseBeforeMapping(t *testing.T) {

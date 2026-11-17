@@ -615,13 +615,21 @@ func setupNetworkListener(transport *NTCP2Transport, config *Config, ntcp2Config
 	host, portStr, _ := net.SplitHostPort(boundAddr)
 	if !nat.IsLoopbackAddress(host) {
 		port, _ := strconv.Atoi(portStr)
-		cfg := &nat.PortMapperConfig{
-			Network:      "tcp",
-			InternalPort: port,
-			Context:      transport.ctx,
+		// router.upnp_enabled=false (threaded in as DisablePortMapping) suppresses
+		// the gateway port mapping, mirroring the SSU2 gate (I2P-H-5). Without this,
+		// NTCP2 was the half that still mapped unconditionally on a public bind.
+		if config.DisablePortMapping {
+			transport.logger.WithField("internal_port", port).
+				Info("UPnP/NAT-PMP port mapping disabled by config (router.upnp_enabled=false)")
+		} else {
+			cfg := &nat.PortMapperConfig{
+				Network:      "tcp",
+				InternalPort: port,
+				Context:      transport.ctx,
+			}
+			transport.portMapperManager = nat.NewPortMapperManager(cfg)
+			transport.logger.WithField("internal_port", port).Info("Started TCP port mapper")
 		}
-		transport.portMapperManager = nat.NewPortMapperManager(cfg)
-		transport.logger.WithField("internal_port", port).Info("Started TCP port mapper")
 	}
 
 	return attachNTCP2Listener(transport, tcpListener, ntcp2Config)

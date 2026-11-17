@@ -65,6 +65,16 @@ type Config struct {
 	// of transport.idle_timeout (I2P C1: the knob previously never reached the
 	// idle reaper).
 	IdleTimeout time.Duration
+
+	// DisablePortMapping suppresses the UPnP/NAT-PMP port mapping the transport
+	// otherwise opens on a non-loopback bind. The zero value (false) keeps
+	// mapping enabled, matching the transport's historical default and the
+	// reference implementation. The router sets this from
+	// !router.upnp_enabled so an operator can keep a public bind from asking the
+	// gateway to open a port. Mirrors ssu2.Config.DisablePortMapping (I2P-H-5:
+	// NTCP2 was the half that still mapped unconditionally).
+	DisablePortMapping bool
+
 	*ntcp2.Config
 }
 
