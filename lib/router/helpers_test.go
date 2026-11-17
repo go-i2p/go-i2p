@@ -114,6 +114,14 @@ func newTestRouterForWait(t *testing.T) *Router {
 func createTestRouterConfig(tmpDir string) *config.RouterConfig {
 	return &config.RouterConfig{
 		WorkingDir: tmpDir,
+		// Testnet mode makes the router express no bootstrap peer floor, so
+		// startup is not gated on NetDB size. Without it, an empty on-disk
+		// netDb sits below the default emergency floor (40) and Start() runs
+		// the floor-gated reseed retry loop (5 attempts + exponential backoff)
+		// and fails with "initial reseed failed after 5 attempts" — both the
+		// ~410s wall-clock and the round-0 Start() error seen on CI. Testnet
+		// routes bootstrap through the single best-effort path instead.
+		Testnet: true,
 		I2CP: &config.I2CPConfig{
 			Enabled: false,
 		},
