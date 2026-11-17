@@ -99,6 +99,8 @@ func registerRouterFlags(cmd *cobra.Command) {
 		"Participate in transit tunnels for the network")
 	cmd.PersistentFlags().Bool("router.hidden", routerCfg.Hidden,
 		"Hidden mode: client-only operation, no transit, no published transport addresses")
+	cmd.PersistentFlags().Bool("router.always-zero-hop-inbound", routerCfg.AlwaysZeroHopInbound,
+		"Force exploratory inbound tunnels to zero hops (us as both gateway and endpoint); for strict NAT without a published address. Implied by --router.hidden")
 	cmd.PersistentFlags().Bool("router.upnp-enabled", routerCfg.UpnpEnabled,
 		"Attempt UPnP/NAT-PMP port mapping on a public transport bind")
 	cmd.PersistentFlags().Bool("router.testnet", routerCfg.Testnet,
@@ -390,6 +392,7 @@ func bindRouterFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"router.max_connections", "router.max-connections"},
 		{"router.accept_tunnels", "router.accept-tunnels"},
 		{"router.hidden", "router.hidden"},
+		{"router.always_zero_hop_inbound", "router.always-zero-hop-inbound"},
 		{"router.upnp_enabled", "router.upnp-enabled"},
 		{"router.testnet", "router.testnet"},
 		{"router.info_refresh_interval", "router.info-refresh-interval"},

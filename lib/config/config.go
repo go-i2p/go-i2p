@@ -115,6 +115,7 @@ func setRouterDefaults(defaults ConfigDefaults) {
 		{"router.accept_tunnels", true},
 		{"router.testnet", false},
 		{"router.hidden", false},
+		{"router.always_zero_hop_inbound", false},
 		{"router.always_one_hop_outbound", false},
 		{"router.upnp_enabled", defaults.Router.UpnpEnabled},
 	})
@@ -285,6 +286,7 @@ func NewRouterConfigFromViper() (*RouterConfig, error) {
 		AcceptTunnels:             viper.GetBool("router.accept_tunnels"),
 		Testnet:                   viper.GetBool("router.testnet"),
 		Hidden:                    viper.GetBool("router.hidden"),
+		AlwaysZeroHopInbound:      viper.GetBool("router.always_zero_hop_inbound"),
 		AlwaysOneHopOutbound:      viper.GetBool("router.always_one_hop_outbound"),
 		UpnpEnabled:               viper.GetBool("router.upnp_enabled"),
 		Tunnel:                    buildTunnelConfig(),

@@ -110,6 +110,31 @@ func TestRouterTestnetFlagReachesItsViperKey(t *testing.T) {
 		"an unset router.testnet must stay false; the bootstrap peer floor is on by default")
 }
 
+// TestRouterAlwaysZeroHopInboundFlagReachesItsViperKey proves --router.always-zero-hop-inbound
+// is bound to the exact viper key lib/config's NewRouterConfigFromViper reads. The
+// flag name uses hyphens while the key uses underscores, which is where a mismatch
+// comes from; a mismatch would leave the operator's zero-hop-inbound setting ignored.
+func TestRouterAlwaysZeroHopInboundFlagReachesItsViperKey(t *testing.T) {
+	cmd := &cobra.Command{Use: "go-i2p-zhi"}
+	v := viper.New()
+
+	RegisterAll(cmd)
+	require.NoError(t, BindAll(cmd, v), "every registered flag must bind to its viper key")
+
+	require.NoError(t, cmd.PersistentFlags().Set("router.always-zero-hop-inbound", "true"),
+		"router.always-zero-hop-inbound must be registered before it can be set")
+	assert.True(t, v.GetBool("router.always_zero_hop_inbound"),
+		"--router.always-zero-hop-inbound=true must resolve to viper key \"router.always_zero_hop_inbound\"")
+
+	// Left unset, the key must resolve false so zero-hop inbound stays opt-in.
+	unsetCmd := &cobra.Command{Use: "go-i2p-zhi-unset"}
+	RegisterAll(unsetCmd)
+	unset := viper.New()
+	require.NoError(t, BindAll(unsetCmd, unset))
+	assert.False(t, unset.GetBool("router.always_zero_hop_inbound"),
+		"an unset router.always_zero_hop_inbound must stay false; zero-hop inbound is opt-in")
+}
+
 // TestTransportHandshakeBoundFlagsDefaultToZero verifies the two handshake flags
 // default to 0 rather than a number, so an operator who sets nothing leaves the
 // transport to resolve its own documented default instead of this package's copy

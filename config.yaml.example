@@ -64,6 +64,12 @@ router:
   # dial a new inbound connection. Recommended for firewalled/NATted routers.
   # Implied by hidden: true.
   always_one_hop_outbound: false
+  # Force inbound exploratory tunnels to use zero hops: this router serves as
+  # both the inbound gateway and the inbound endpoint, so no remote hop has to
+  # deliver the build reply back to us. Useful behind a strict NAT when no
+  # reachable transport address is published. Implied by hidden: true.
+  # Default: false.
+  always_zero_hop_inbound: false
   # Maximum bandwidth in bytes/sec (0 = unlimited)
   max_bandwidth: 1048576
   # Optional RouterInfo bandwidth capability tier override (K/L/M/N/O/P/X).
