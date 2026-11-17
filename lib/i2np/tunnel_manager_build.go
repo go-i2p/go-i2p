@@ -642,7 +642,11 @@ func (tm *TunnelManager) createSerializedShortTunnelBuildMessage(result *tunnel.
 		return nil, err
 	}
 
-	if err := tm.registerGarlicReplyKeys(preReplyCKs, messageID, result.TunnelID); err != nil {
+	// Only an outbound build's last hop is an OBEP that wraps its reply in
+	// garlic addressed to us. Inbound builds' last hop is a plain participant,
+	// so registering a garlic reply key there would leave a dead entry (I2P-B-2).
+	lastIsOBEP := len(i2npRecords) > 0 && i2npRecords[len(i2npRecords)-1].Flag&tunnel.FlagOBEP != 0
+	if err := tm.registerGarlicReplyKeys(preReplyCKs, lastIsOBEP, messageID, result.TunnelID); err != nil {
 		return nil, err
 	}
 
@@ -830,15 +834,20 @@ func (tm *TunnelManager) updateLayerKeys(result *tunnel.TunnelBuildResult, hopKe
 // registerGarlicReplyKeys derives and registers the one-time garlic key for OBEP
 // reply decryption. The OBEP branch of the shared KDF produces the garlic reply
 // key/tag (SMTunnelLayerKey -> TunnelLayerIVKey -> RGarlicKeyAndTag).
-func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][x25519KeySize]byte, messageID int, tunnelID tunnel.TunnelID) error {
-	if tm.garlicKeyRegistrar == nil || len(preReplyCKs) == 0 {
+//
+// Registration is gated on lastIsOBEP: only an outbound build's last hop is an
+// OBEP that wraps its OutboundTunnelBuildReply in garlic addressed to the
+// creator. For an inbound build the last hop is a plain participant that never
+// sends us a garlic-wrapped reply, so registering a key there would leave an
+// entry that is never consumed — a dead entry (I2P-B-2).
+func (tm *TunnelManager) registerGarlicReplyKeys(preReplyCKs [][x25519KeySize]byte, lastIsOBEP bool, messageID int, tunnelID tunnel.TunnelID) error {
+	if tm.garlicKeyRegistrar == nil || len(preReplyCKs) == 0 || !lastIsOBEP {
 		return nil
 	}
 
-	// The OBEP always wraps its OutboundTunnelBuildReply in garlic addressed to the
+	// The OBEP wraps its OutboundTunnelBuildReply in garlic addressed to the
 	// creator, so the creator derives the one-time garlic key/tag from the last
-	// hop's pre-reply chaining key using the OBEP branch of the KDF, regardless
-	// of the flag bits carried in the record.
+	// hop's pre-reply chaining key using the OBEP branch of the KDF.
 	lastHop := len(preReplyCKs) - 1
 	obepKeys, obepErr := deriveSTBMHopKeys(preReplyCKs[lastHop], true)
 	if obepErr != nil {
