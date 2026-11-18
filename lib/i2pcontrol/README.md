@@ -207,9 +207,9 @@ JSON-RPC 2.0 error codes:
     - -32601: Method not found
     - -32602: Invalid params
     - -32603: Internal error
-    - -32000: Authentication required (missing/invalid token)
+    - -32002: Authentication required (missing/invalid token)
     - -32001: Authentication failed (wrong password)
-    - -32002: Not implemented (method planned but not yet available)
+    - -32099: Not implemented (method planned but not yet available)
 
 # Security Considerations
 

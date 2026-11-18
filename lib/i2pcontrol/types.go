@@ -16,14 +16,17 @@ const (
 	ErrCodeInternalError  = -32603 // Internal JSON-RPC error
 
 	// I2PControl-specific error codes.
-	// Codes -32001 through -32006 are assigned by the I2PControl spec.
-	ErrCodeAuthRequired           = -32000 // No authentication token presented
+	// Codes -32001 through -32006 are assigned by the I2PControl spec
+	// (i2p.website api/i2pcontrol.md §5). -32000 is left unassigned by the spec.
+	// Code -32099 is used for implementation-defined "not implemented" to avoid
+	// colliding with the spec-defined range.
 	ErrCodeAuthFailed             = -32001 // Authentication failed (invalid password)
-	ErrCodeNotImpl                = -32002 // Method not implemented (per I2PControl spec)
+	ErrCodeAuthRequired           = -32002 // No authentication token presented (per I2PControl spec)
 	ErrCodeTokenNotExist          = -32003 // Authentication token does not exist
 	ErrCodeTokenExpired           = -32004 // Authentication token expired and removed
 	ErrCodeAPIVersionNotSpecified = -32005 // API version not specified in Authenticate request
 	ErrCodeAPIVersionNotSupported = -32006 // API version specified is not supported
+	ErrCodeNotImpl                = -32099 // Method not yet implemented (implementation-defined)
 )
 
 // Request represents a JSON-RPC 2.0 request.

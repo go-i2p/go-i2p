@@ -135,9 +135,9 @@
 //   - -32601: method not found.
 //   - -32602: invalid params.
 //   - -32603: internal error.
-//   - -32000: authentication required (missing or invalid token).
+//   - -32002: authentication required (missing or invalid token).
 //   - -32001: authentication failed (wrong password).
-//   - -32002: not implemented (method planned but not yet available).
+//   - -32099: not implemented (method planned but not yet available).
 //
 // # Security
 //

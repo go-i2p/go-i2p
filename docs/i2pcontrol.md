@@ -431,7 +431,7 @@ All errors follow JSON-RPC 2.0 error format:
   "jsonrpc": "2.0",
   "id": 5,
   "error": {
-    "code": -32000,
+    "code": -32002,
     "message": "authentication required"
   }
 }
@@ -446,7 +446,7 @@ All errors follow JSON-RPC 2.0 error format:
 | -32601 | Method not found | Typo in method name |
 | -32602 | Invalid params | Wrong parameter format |
 | -32603 | Internal error | Server-side problem |
-| -32000 | Auth required | Missing or expired token |
+| -32002 | Auth required | Missing or expired token |
 | -32001 | Auth failed | Wrong password |
 
 ### Complete Example Script
