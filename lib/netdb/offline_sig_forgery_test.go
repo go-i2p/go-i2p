@@ -138,7 +138,10 @@ func TestStoreEncryptedLeaseSetRejectsForgedOfflineSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	els, err := encrypted_leaseset.NewEncryptedLeaseSet(
-		uint16(key_certificate.KEYCERT_SIGN_ED25519),
+		// The blinded public key field is always Red25519 (11) per
+		// encryptedleaseset.md; Ed25519 (7) is only valid for the offline
+		// transient key, which stays type 7 below.
+		uint16(key_certificate.KEYCERT_SIGN_REDDSA_ED25519),
 		blindedPub,
 		uint32(time.Now().Unix()),
 		600,
