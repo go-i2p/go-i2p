@@ -5,120 +5,101 @@ import (
 	"crypto/rand"
 	"testing"
 
+	i2ptunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestSTBMReplyRecordFormat verifies the ECIES/STBM reply record format
-// per tunnel-creation-ecies.rst / stbm_chacha20_layer:
-//   - 202-byte cleartext: 2-byte zero options + 199-byte padding + 1-byte ret code
-//   - 218-byte ciphertext + 16-byte Poly1305 MAC = 234 bytes total AEAD output
+// TestSTBMReplyRecordFormat verifies the ECIES/STBM short reply record format
+// against the production AEAD primitive (crypto/tunnel.EncryptOwnBuildReply),
+// per tunnel-creation-ecies.md §"Short Reply Record":
+//   - 202-byte cleartext: 2-byte options + random padding + 1-byte ret code at 201
+//   - 218-byte encrypted record, which INCLUDES the 16-byte Poly1305 tag
+//     (202 ciphertext + 16 MAC = 218; the MAC is not added on top).
 //
-// This addresses audit gap C1 (TEST_SPEC_COMPLIANCE_ANALYSIS.md).
+// This addresses audit gap C1 (TEST_SPEC_COMPLIANCE_ANALYSIS.md) and finding
+// GI-E01: the previous version asserted a 234-byte total that double-counted the
+// MAC and only compared locally-declared constants, so it tested no production
+// code. A maintainer aligning the wire format to 234 would emit records no
+// conforming 0.9.51+ router reads (wire slots are 218 bytes).
 func TestSTBMReplyRecordFormat(t *testing.T) {
-	// Per spec: unencrypted reply record = 202 bytes
-	// Cleartext layout: bytes 0-1 = zero options (0x00 0x00)
-	//                   bytes 2-200 = 199 bytes random padding
-	//                   byte 201 = reply code (0x00 accept, 30 = BANDWIDTH)
-	var cleartext [202]byte
-	cleartext[0] = 0x00
-	cleartext[1] = 0x00
-	// Padding bytes 2-200 should be non-deterministic; we don't enforce
-	// exact randomness here but verify length and ret-code position.
-	cleartext[201] = 0x00 // accept
-
-	assert.Equal(t, 202, len(cleartext), "STBM reply cleartext must be 202 bytes")
-
-	// The encrypted form is 218 bytes (ciphertext) + 16 bytes (MAC) = 234 bytes.
-	// Note: the legacy ElGamal reply format (528-byte record) is obsolete
-	// per user correction; this test enforces the modern STBM format.
-	const expectedCiphertextLen = 218
-	const expectedMACLen = 16
-	assert.Equal(t, expectedCiphertextLen+expectedMACLen, 234,
-		"STBM AEAD output must be 218 (ciphertext) + 16 (MAC) = 234 bytes")
-
-	// Verify ret code positions for both valid ECIES reply values.
-	validRetCodes := []byte{0x00, 30}
-	for _, ret := range validRetCodes {
-		t.Run("ret_"+string(rune(ret)), func(t *testing.T) {
-			var rec [202]byte
-			rec[0] = 0x00
-			rec[1] = 0x00
-			rec[201] = ret
-			assert.Equal(t, ret, rec[201],
-				"reply byte must be at position 201 (last byte of 202-byte cleartext)")
-		})
-	}
-
-	// Verify the hash/checksum structure for reply records is not the
-	// legacy 528-byte format (32-byte hash + 495 padding + 1 status).
-	// STBM uses AEAD (ChaCha20-Poly1305) with AD = noise hash, not SHA-256.
-	assert.NotEqual(t, 528, 202,
-		"STBM reply cleartext (202 bytes) must not match obsolete ElGamal format (528 bytes)")
-}
-
-// TestSTBMReplyRecordAEADIntegrity verifies AEAD detects tampering in the
-// 218-byte ciphertext + 16-byte MAC STBM reply format.
-func TestSTBMReplyRecordAEADIntegrity(t *testing.T) {
-	f := newSTBMReplyFixture(t)
-
-	ciphertext, err := f.crypto.EncryptReplyRecordSTBM(f.record, f.replyKey, f.replyIV)
+	var key, ad [32]byte
+	_, err := rand.Read(key[:])
+	require.NoError(t, err)
+	_, err = rand.Read(ad[:])
 	require.NoError(t, err)
 
-	// STBM AEAD output per tunnel-creation-ecies.rst: encrypted reply = 218 bytes
-	// (this includes the 16-byte Poly1305 MAC; ciphertext portion = 202 bytes).
-	assert.Equal(t, 218, len(ciphertext),
+	// Valid ECIES short reply codes: accept and bandwidth-reject.
+	validRetCodes := []byte{TunnelBuildReplySuccess, TunnelBuildReplyBandwidth}
+	for _, ret := range validRetCodes {
+		t.Run("ret_"+string(rune(ret)), func(t *testing.T) {
+			// Cleartext layout (tunnel-creation-ecies.md §"Short Reply Record
+			// Unencrypted"): bytes 0-1 = options, bytes 2-200 = random padding,
+			// byte 201 = reply code.
+			cleartext := make([]byte, ShortBuildReplyCleartextSize) // 202
+			require.Equal(t, 202, len(cleartext))
+			_, err := rand.Read(cleartext[2:ShortBuildReplyCodeOffset]) // padding
+			require.NoError(t, err)
+			cleartext[ShortBuildReplyCodeOffset] = ret // offset 201
+
+			// Production AEAD seal. The encrypted short reply record is 218 bytes
+			// total, MAC included (spec: "Encrypted size: 218 bytes").
+			ciphertext, err := i2ptunnel.EncryptOwnBuildReply(key, ad, 0, cleartext)
+			require.NoError(t, err)
+			require.Len(t, ciphertext, ShortBuildRecordSize,
+				"STBM encrypted reply must be 218 bytes total (202 ciphertext + 16 MAC, MAC included)")
+
+			// Round-trip through the production open path and confirm the reply
+			// code survives at offset 201.
+			out, err := i2ptunnel.DecryptOwnBuildReply(key, ad, 0, ciphertext)
+			require.NoError(t, err)
+			require.Len(t, out, ShortBuildReplyCleartextSize)
+			assert.Equal(t, ret, out[ShortBuildReplyCodeOffset],
+				"reply byte must round-trip at position 201 (last byte of 202-byte cleartext)")
+		})
+	}
+}
+
+// TestSTBMReplyRecordAEADIntegrity verifies that the production AEAD path
+// (crypto/tunnel.EncryptOwnBuildReply + decryptSTBMReplySlot) detects tampering
+// in the 218-byte STBM reply record via the Poly1305 tag.
+//
+// This addresses finding GI-E02: the previous version used a test-local shim that
+// appended zero MAC bytes and gated decryption on length, so the tamper assertion
+// passed on length rather than on a real tag. It now drives the same primitive the
+// reply handler uses (decryptSTBMReplySlot -> DecryptOwnBuildReply).
+func TestSTBMReplyRecordAEADIntegrity(t *testing.T) {
+	var key, ad [32]byte
+	_, err := rand.Read(key[:])
+	require.NoError(t, err)
+	_, err = rand.Read(ad[:])
+	require.NoError(t, err)
+
+	cleartext := make([]byte, ShortBuildReplyCleartextSize) // 202
+	_, err = rand.Read(cleartext[2:ShortBuildReplyCodeOffset])
+	require.NoError(t, err)
+	cleartext[ShortBuildReplyCodeOffset] = TunnelBuildReplySuccess
+
+	ciphertext, err := i2ptunnel.EncryptOwnBuildReply(key, ad, 0, cleartext)
+	require.NoError(t, err)
+	require.Len(t, ciphertext, ShortBuildRecordSize,
 		"STBM encrypted reply must be 218 bytes (202 ciphertext + 16 MAC, per spec)")
 
-	// Tamper with ciphertext byte
+	// Sanity: the untouched record opens cleanly through the production slot path.
+	out, err := decryptSTBMReplySlot(ciphertext, key, ad, 0)
+	require.NoError(t, err)
+	require.Len(t, out, ShortBuildReplyCleartextSize)
+	assert.Equal(t, byte(TunnelBuildReplySuccess), out[ShortBuildReplyCodeOffset])
+
+	// Tamper with a ciphertext byte: the Poly1305 tag must reject it.
 	tampered := make([]byte, len(ciphertext))
 	copy(tampered, ciphertext)
 	tampered[50] ^= 0x01
 
-	_, err = f.crypto.DecryptReplyRecordSTBM(tampered, f.replyKey, f.replyIV)
-	assert.Error(t, err, "tampered STBM reply ciphertext must fail AEAD verification")
-}
+	_, err = decryptSTBMReplySlot(tampered, key, ad, 0)
+	assert.Error(t, err, "tampered STBM reply ciphertext must fail AEAD tag verification")
 
-type stbmReplyFixture struct {
-	crypto   *STBMReplyCrypto
-	replyKey [32]byte
-	replyIV  [12]byte
-	record   [202]byte
-}
-
-func newSTBMReplyFixture(t *testing.T) *stbmReplyFixture {
-	t.Helper()
-	f := &stbmReplyFixture{crypto: NewSTBMReplyCrypto()}
-	_, err := rand.Read(f.replyKey[:])
-	require.NoError(t, err)
-	_, err = rand.Read(f.replyIV[:])
-	require.NoError(t, err)
-	f.record[0] = 0x00
-	f.record[1] = 0x00
-	f.record[201] = 0x00 // accept
-	return f
-}
-
-// STBMReplyCrypto is a minimal wrapper for the STBM AEAD reply encryption.
-// In production this uses the ChaCha20-Poly1305 layer from stbm_chacha20_layer.
-type STBMReplyCrypto struct{}
-
-func NewSTBMReplyCrypto() *STBMReplyCrypto { return &STBMReplyCrypto{} }
-
-func (c *STBMReplyCrypto) EncryptReplyRecordSTBM(rec [202]byte, key [32]byte, iv [12]byte) ([]byte, error) {
-	// Spec-compliant STBM AEAD: 202-byte cleartext sealed with ChaCha20-Poly1305.
-	// The sealed output is 202 bytes (ciphertext, same length as plaintext for AEAD)
-	// plus 16-byte MAC appended = 218 bytes total (per tunnel-creation-ecies.rst:
-	// "Encrypted size: 218 bytes" for short reply records, which includes MAC).
-	ciphertext := append(rec[:], make([]byte, 16)...)
-	return ciphertext, nil
-}
-
-func (c *STBMReplyCrypto) DecryptReplyRecordSTBM(data []byte, key [32]byte, iv [12]byte) ([202]byte, error) {
-	var rec [202]byte
-	if len(data) < 234 {
-		return rec, assert.AnError
-	}
-	copy(rec[:], data[:202])
-	return rec, nil
+	// A truncated record must also fail (size gate), not silently parse.
+	_, err = decryptSTBMReplySlot(ciphertext[:ShortBuildRecordSize-1], key, ad, 0)
+	assert.Error(t, err, "truncated STBM reply record must fail AEAD verification")
 }
