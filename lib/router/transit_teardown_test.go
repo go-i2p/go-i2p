@@ -13,8 +13,8 @@ import (
 
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/common/session_key"
-	cryptotunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/crypto/rand"
+	cryptotunnel "github.com/go-i2p/crypto/tunnel"
 	"github.com/go-i2p/go-i2p/lib/i2cp"
 	"github.com/go-i2p/go-i2p/lib/i2np"
 	tunnelpkg "github.com/go-i2p/go-i2p/lib/tunnel"
@@ -90,21 +90,26 @@ func TestTransitTunnel_NextHopUnresolvableFailsOnceAndTearsDown(t *testing.T) {
 	participant := pm.GetParticipant(transitTunnelID)
 	require.NotNil(t, participant)
 
-	// Build a valid encrypted transit record.
-	inner := make([]byte, 1028)
-	for i := 4; i < 20; i++ {
-		inner[i] = byte(0x40 + i) // nonzero IV so the IV-bloom accepts each record
+	// Build a valid encrypted transit record. A helper varies the IV per record
+	// so Participant.Process accepts each one (the IV-bloom would otherwise
+	// drop identical-IV records before the forwarding stage), ensuring the
+	// IsFailed guard — not duplicate suppression — is what bounds the next-hop
+	// attempts.
+	buildMsg := func(ivByte byte) i2np.Message {
+		inner := make([]byte, 1028)
+		for i := 4; i < 20; i++ {
+			inner[i] = ivByte // distinct IV per record
+		}
+		for i := 20; i < len(inner); i++ {
+			inner[i] = byte(i % 256)
+		}
+		encryptedMsg, err := aesEncryptor.Encrypt(inner)
+		require.NoError(t, err)
+		require.Equal(t, 1028, len(encryptedMsg))
+		var payload [1024]byte
+		copy(payload[:], encryptedMsg[4:])
+		return i2np.NewTunnelDataMessage(transitTunnelID, payload)
 	}
-	for i := 20; i < len(inner); i++ {
-		inner[i] = byte(i % 256)
-	}
-	encryptedMsg, err := aesEncryptor.Encrypt(inner)
-	require.NoError(t, err)
-	require.Equal(t, 1028, len(encryptedMsg))
-
-	var payload [1024]byte
-	copy(payload[:], encryptedMsg[4:])
-	msg := i2np.NewTunnelDataMessage(transitTunnelID, payload)
 
 	// Next hop is unresolvable.
 	provider := &failingSessionProvider{}
@@ -112,16 +117,17 @@ func TestTransitTunnel_NextHopUnresolvableFailsOnceAndTearsDown(t *testing.T) {
 
 	// First record: fails cleanly. HandleTunnelData must return nil so the
 	// router's message loop does not log the failure a second time.
-	err = handler.HandleTunnelData(msg)
+	err = handler.HandleTunnelData(buildMsg(0x10))
 	require.NoError(t, err, "first transit record must fail cleanly (nil) so the caller does not double-log")
 
 	// The participant is marked failed and treated as expired (teardown).
 	assert.True(t, participant.IsFailed(), "participant must be marked failed after next-hop resolution failure")
 	assert.True(t, participant.IsExpired(time.Now()), "failed participant must be treated as expired so the manager tears it down")
 
-	// Subsequent records drop silently and never re-attempt the next hop.
-	for i := 0; i < 4; i++ {
-		err = handler.HandleTunnelData(msg)
+	// Subsequent records (distinct IVs, so Process accepts them) drop silently
+	// and never re-attempt the next hop.
+	for i := 1; i < 5; i++ {
+		err = handler.HandleTunnelData(buildMsg(byte(0x20 + i)))
 		require.NoError(t, err, "subsequent records for a failed tunnel must drop silently (nil)")
 	}
 

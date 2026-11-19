@@ -52,10 +52,13 @@
 //	    log.Printf("Failed to store: %v", err)
 //	}
 //
-//	// Retrieve a RouterInfo.
-//	riChan := db.GetRouterInfo(hash)
-//	if ri, ok := <-riChan; ok {
-//	    // Use router info
+//	// Retrieve a RouterInfo. GetRouterInfo returns a nil channel when the
+//	// hash is absent (definitive not-found), so always nil-check before
+//	// receiving — receiving on a nil channel blocks forever.
+//	if riChan := db.GetRouterInfo(hash); riChan != nil {
+//	    if ri, ok := <-riChan; ok {
+//	        // Use router info
+//	    }
 //	}
 //
 // # Reseed and bootstrap

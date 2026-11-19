@@ -435,8 +435,19 @@ func (db *StdNetDB) TestInsertRouterInfo(hash common.Hash, entry Entry) {
 	db.riCache.put(hash, entry)
 }
 
-// GetRouterInfo returns a channel that yields the RouterInfo for the given hash,
-// checking the in-memory cache first and falling back to disk.
+// GetRouterInfo returns a channel that yields the RouterInfo for the given
+// hash, checking the in-memory cache first and falling back to disk.
+//
+// Contract (definitive result, never ambiguous):
+//   - Present: returns a non-nil channel that delivers the RouterInfo.
+//   - Absent (or withheld, e.g. during a refresh cooldown): returns a nil
+//     channel. Callers MUST nil-check before receiving — receiving on a nil
+//     channel blocks forever.
+//
+// It never returns a non-nil channel that closes empty: that ambiguous form
+// previously let callers mistake a missing entry for a lookup that started but
+// never delivered, producing per-packet "failed to receive RouterInfo" errors
+// in transit forwarding.
 func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.RouterInfo) {
 	log.WithFields(logger.Fields{
 		"at":     "(StdNetDB) GetRouterInfo",
