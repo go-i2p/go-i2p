@@ -145,6 +145,10 @@ func (a *floodfillTransportAdapter) SendI2NPMessage(ctx context.Context, routerH
 
 	// Resolve RouterInfo from local NetDB (channel-based API)
 	riChan := a.db.GetRouterInfo(routerHash)
+	if riChan == nil {
+		// Definitive not-found: fast-fail rather than waiting on ctx over a nil channel.
+		return oops.Errorf("floodfill: router %x not found in netdb", routerHash[:8])
+	}
 	var ri router_info.RouterInfo
 	select {
 	case ri = <-riChan:

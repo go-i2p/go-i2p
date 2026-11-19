@@ -218,10 +218,11 @@ func TestStdNetDB_RequestRouterInfoRefresh_RemovesPersistentEntry(t *testing.T) 
 		t.Fatalf("expected RouterInfo file to remain on disk, got: %v", err)
 	}
 
-	if ch := db.GetRouterInfo(hash); ch == nil {
-		t.Fatal("expected closed channel, got nil")
-	} else if _, ok := <-ch; ok {
-		t.Fatal("expected refreshed RouterInfo lookup to miss while refresh cooldown is active")
+	// During the refresh cooldown the (stale) on-disk copy is deliberately
+	// withheld. The contract is a definitive not-found: a nil channel, never a
+	// non-nil channel that closes empty.
+	if ch := db.GetRouterInfo(hash); ch != nil {
+		t.Fatal("expected nil channel (definitive not-found) while refresh cooldown is active, got non-nil")
 	}
 }
 

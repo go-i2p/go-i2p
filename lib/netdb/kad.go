@@ -209,9 +209,14 @@ func (kr *KademliaResolver) attemptLocalLookup(h common.Hash) *router_info.Route
 
 // receiveRouterInfo fetches a RouterInfo from the network database channel.
 // Returns the RouterInfo and true on success, or a zero-value and false if
-// the channel closed without delivering a result.
+// the channel is nil (entry absent) or closed without delivering a result.
 func (kr *KademliaResolver) receiveRouterInfo(h common.Hash) (router_info.RouterInfo, bool) {
 	riChan := kr.NetworkDatabase.GetRouterInfo(h)
+	if riChan == nil {
+		// Definitive not-found: the entry is absent from the local database.
+		// A nil channel must not be received on (it would block forever).
+		return router_info.RouterInfo{}, false
+	}
 	ri, ok := <-riChan
 	if !ok {
 		log.WithFields(logger.Fields{

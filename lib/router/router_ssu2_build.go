@@ -77,6 +77,11 @@ func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr str
 	ssu2Config.ExternalAddress = r.cfg.ExternalAddress
 	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
 		ch := r.netdb.GetRouterInfo(hash)
+		if ch == nil {
+			// Definitive not-found: fast-fail rather than waiting out the
+			// lookup timeout on a nil channel.
+			return router_info.RouterInfo{}, oops.Errorf("router %x not found in netdb", hash[:4])
+		}
 		var ri router_info.RouterInfo
 		var ok bool
 		select {

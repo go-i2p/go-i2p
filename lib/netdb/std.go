@@ -463,9 +463,14 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 			"reason": "refresh cooldown active",
 			"hash":   logutil.HashPrefix(hash),
 		}).Debug("routerInfo lookup suppressed while refresh cooldown is active")
-		chnl = make(chan router_info.RouterInfo)
-		close(chnl)
-		return chnl
+		// Definitive not-found: return a nil channel rather than a non-nil
+		// channel that closes empty. A refresh was recently requested for this
+		// peer (its cached RouterInfo was evicted as stale), so we deliberately
+		// withhold the possibly-stale on-disk copy until the cooldown lapses.
+		// Returning nil lets callers distinguish "absent / withheld" from
+		// "present" unambiguously (issue: per-packet "failed to receive
+		// RouterInfo" spam from an ambiguous empty close).
+		return nil
 	}
 
 	// Load from file
@@ -486,12 +491,13 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 		} else {
 			logEntry.Error("failed to load RouterInfo from file")
 		}
-		// Return a closed empty channel instead of nil so that callers
-		// doing <-chnl receive the zero value immediately rather than
-		// blocking forever on a nil channel.
-		chnl = make(chan router_info.RouterInfo)
-		close(chnl)
-		return chnl
+		// Definitive not-found: return a nil channel. Callers must treat a nil
+		// channel as "no RouterInfo available" (the contract documented on
+		// GetRouterInfo). Returning nil rather than a non-nil channel that
+		// closes empty keeps the absent-vs-present distinction unambiguous, so
+		// callers never mistake a missing entry for a lookup that started but
+		// never delivered (issue: per-packet "failed to receive RouterInfo").
+		return nil
 	}
 
 	chnl = make(chan router_info.RouterInfo, 1)
@@ -502,8 +508,9 @@ func (db *StdNetDB) GetRouterInfo(hash common.Hash) (chnl chan router_info.Route
 			"reason": "parse failed",
 			"hash":   logutil.HashPrefix(hash),
 		}).Error("failed to parse RouterInfo")
-		close(chnl)
-		return chnl
+		// A present-but-unparseable entry is treated as not-found: return nil
+		// so the contract stays "value or nil", never an ambiguous empty close.
+		return nil
 	}
 
 	chnl <- ri
