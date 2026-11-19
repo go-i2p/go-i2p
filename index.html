@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2722 commits
+        📝 2723 commits
          • 📜 MIT License
       </div>
     </div>
@@ -60,7 +60,7 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>2722 commits</span>
+          <span>📝</span> <span>2723 commits</span>
         </div>
         
         
@@ -320,8 +320,33 @@ router:
   testnet: true
 </code></pre>
 
-<p>Testnet mode does not change the <code>netId</code> this router advertises or accepts, so
-the test network must still use RouterInfos carrying the production <code>netId</code>.</p>
+<p>Testnet mode does not change the <code>netId</code> this router advertises or accepts. By
+default go-i2p uses the production <code>netId</code> (<code>2</code>), so a test network must either
+use RouterInfos carrying that <code>netId</code> or you must set <code>netdb.net_id</code> to the test
+network&rsquo;s ID (see below).</p>
+
+<h3 id="configuring-the-network-id">Configuring the network ID</h3>
+
+<p>The <code>netId</code> is the I2P network identifier a router advertises in its RouterInfo
+and expects on inbound RouterInfos. go-i2p defaults to <code>2</code> (the production I2P
+network, matching i2pd) and rejects RouterInfos advertising any other <code>netId</code>,
+so a router on an isolated testnet would otherwise refuse every testnet peer.</p>
+
+<p>Set <code>netdb.net_id</code> to the test network&rsquo;s ID (commonly <code>3</code>) to both advertise and
+accept it:</p>
+
+<pre><code class="language-shell">go-i2p --netdb.net-id 3
+</code></pre>
+
+<pre><code class="language-yaml"># or in $HOME/.go-i2p/config.yaml
+netdb:
+  net_id: &quot;3&quot;
+</code></pre>
+
+<p>The value must match the <code>netId</code> carried by the test network&rsquo;s RouterInfos and
+reseed data, otherwise the NetDB will reject the peers it learns. Combine it with
+<code>router.testnet: true</code> (no bootstrap peer floor) when running a small isolated
+network.</p>
 
 <p>To keep the floor but lower it — a small private network that wants the
 emergency-reseed safety net without waiting on 40 peers — set
@@ -445,7 +470,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                2319 commits
+                2320 commits
               </div>
             </div>
           </div>
@@ -517,7 +542,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-11-19 00:16:13 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-11-19 00:24:43 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
