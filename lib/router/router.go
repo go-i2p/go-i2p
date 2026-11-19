@@ -465,6 +465,12 @@ func routerInfoOptionsFromConfig(cfg *config.RouterConfig) keys.RouterInfoOption
 	opts.Hidden = cfg.Hidden
 	if cfg.NetDB != nil {
 		opts.Floodfill = cfg.NetDB.FloodfillEnabled
+		// Advertise the configured network ID (default "2" production; "3" for
+		// testnet). This is the RouterInfo the transports send in NTCP2 msg3 /
+		// SSU2 handshakes, so it must carry the same netId the NetDB expects on
+		// inbound RouterInfos (netdb.SetNetID) — otherwise peers on the test
+		// network reject our RI right after the handshake.
+		opts.NetID = cfg.NetDB.NetID
 	}
 	return opts
 }

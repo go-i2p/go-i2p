@@ -12,6 +12,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestRouterInfoOptionsFromConfig_NetID verifies the RouterInfo options used to
+// build the RouterInfo the transports advertise (NTCP2 msg3 / SSU2 handshake)
+// carry the configured netdb.net_id. Without this, a testnet router would still
+// advertise the production netId "2" and peers on the test network would reject
+// its RouterInfo right after the handshake.
+func TestRouterInfoOptionsFromConfig_NetID(t *testing.T) {
+	cfg := &config.RouterConfig{
+		NetDB: &config.NetDBConfig{NetID: "3"},
+	}
+	opts := routerInfoOptionsFromConfig(cfg)
+	assert.Equal(t, "3", opts.NetID, "advertised RouterInfo must carry configured netId")
+
+	// A nil NetDB must not panic and leaves the default (empty → keystore uses "2").
+	opts = routerInfoOptionsFromConfig(&config.RouterConfig{})
+	assert.Empty(t, opts.NetID, "unset NetID stays empty so the keystore default applies")
+}
+
+// TestRouterInfoProvider_BuildOptions_NetID verifies the periodic-publish
+// provider path also propagates the configured netId, so both the initial
+// transport RouterInfo and later republished ones stay on the same network.
+func TestRouterInfoProvider_BuildOptions_NetID(t *testing.T) {
+	provider := &routerInfoProvider{
+		router: &Router{cfg: &config.RouterConfig{
+			NetDB: &config.NetDBConfig{NetID: "3"},
+		}},
+	}
+	opts := provider.buildRouterInfoOptions()
+	assert.Equal(t, "3", opts.NetID, "provider must advertise configured netId")
+}
+
 // mockCongestionStateProvider implements CongestionStateProvider for testing
 type mockCongestionStateProviderRI struct {
 	flag      config.CongestionFlag
