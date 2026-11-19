@@ -13,7 +13,7 @@
         <a href="index.html">go-i2p/go-i2p</a>
       </h2>
       <div class="repo-meta">
-        📝 2724 commits
+        📝 2725 commits
          • 📜 MIT License
       </div>
     </div>
@@ -60,7 +60,7 @@
       <div class="repo-stats">
         
         <div class="repo-stat">
-          <span>📝</span> <span>2724 commits</span>
+          <span>📝</span> <span>2725 commits</span>
         </div>
         
         
@@ -327,10 +327,14 @@ network&rsquo;s ID (see below).</p>
 
 <h3 id="configuring-the-network-id">Configuring the network ID</h3>
 
-<p>The <code>netId</code> is the I2P network identifier a router advertises in its RouterInfo
-and expects on inbound RouterInfos. go-i2p defaults to <code>2</code> (the production I2P
-network, matching i2pd) and rejects RouterInfos advertising any other <code>netId</code>,
-so a router on an isolated testnet would otherwise refuse every testnet peer.</p>
+<p>The <code>netId</code> is the I2P network identifier a router advertises in its RouterInfo,
+expects on inbound RouterInfos, and writes into the NTCP2/SSU2 handshake (the
+message-1 options block and SSU2 header byte 14). go-i2p defaults to <code>2</code> (the
+production I2P network, matching i2pd) and rejects RouterInfos advertising any
+other <code>netId</code>, so a router on an isolated testnet would otherwise refuse every
+testnet peer. The handshake value is derived from the same configured <code>netId</code>, so
+a non-mainline network interoperates with peers such as i2pd (which otherwise
+rejects a mismatched handshake with <code>networkID 2 mismatch. Expected 5</code>).</p>
 
 <p>Set <code>netdb.net_id</code> to the test network&rsquo;s ID (commonly <code>3</code>) to both advertise and
 accept it:</p>
@@ -470,7 +474,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
                 eyedeekay
               </div>
               <div class="contributor-commits">
-                2321 commits
+                2322 commits
               </div>
             </div>
           </div>
@@ -542,7 +546,7 @@ requiring acknowledgment must implement their own delivery-confirmation layer
     </main>
     
     <footer class="page-footer">
-      <p>Generated on 2026-11-19 01:14:00 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
+      <p>Generated on 2026-11-19 01:58:09 • <a href="https://github.com/go-i2p/go-i2p" target="_blank">View on GitHub</a></p>
     </footer>
   </div>
 </body>
