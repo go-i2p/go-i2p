@@ -209,7 +209,13 @@ func (r *Router) waitForRouterInfo(ch <-chan router_info.RouterInfo, hash common
 	select {
 	case routerInfo, ok := <-ch:
 		if !ok {
-			return nil, oops.Errorf("failed to receive RouterInfo for peer %x", hash[:8])
+			// The lookup channel closed without delivering a RouterInfo. Treat
+			// this as a definitive not-found rather than an ambiguous "receive
+			// failure": the peer's RouterInfo is unavailable (absent, withheld
+			// during a refresh cooldown, or a search that terminated without a
+			// result). Callers (e.g. transit forwarding) rely on this being a
+			// clean, terminal error so they can fail once and tear down.
+			return nil, oops.Errorf("no RouterInfo available for peer %x", hash[:8])
 		}
 		return &routerInfo, nil
 	case <-timer.C:

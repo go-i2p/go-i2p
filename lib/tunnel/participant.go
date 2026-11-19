@@ -88,6 +88,15 @@ type Participant struct {
 	ivHistorySeeded [256]bool
 	// duplicateIVs counts records dropped by the IV-bloom, for observability.
 	duplicateIVs atomic.Uint64
+
+	// failed marks a transit tunnel whose forwarding has definitively failed —
+	// e.g. its next-hop RouterInfo can no longer be resolved. Once set, the
+	// relay drops subsequent records for this tunnel silently (rather than
+	// re-attempting and logging an error per packet) and treats the tunnel as
+	// expired so the manager's cleanup loop tears it down. This bounds a
+	// persistent next-hop failure to a single logged error per tunnel instead
+	// of one per arriving record.
+	failed atomic.Bool
 }
 
 var (
@@ -384,9 +393,30 @@ func (p *Participant) TunnelID() TunnelID {
 // This is used by the tunnel manager to clean up expired participants.
 // Thread-safe: uses atomic load for lifetime.
 func (p *Participant) IsExpired(now time.Time) bool {
+	// A failed transit tunnel is treated as expired so the manager's cleanup
+	// loop tears it down promptly; there is no point keeping a tunnel that can
+	// no longer forward.
+	if p.failed.Load() {
+		return true
+	}
 	lifetime := time.Duration(p.lifetime.Load())
 	expirationTime := p.createdAt.Add(lifetime)
 	return now.After(expirationTime)
+}
+
+// MarkFailed records that this transit tunnel can no longer forward (e.g. its
+// next-hop RouterInfo is unresolvable). The relay uses this to drop subsequent
+// records silently and to let the manager expire the tunnel, so a persistent
+// failure is logged once rather than per packet. Idempotent and thread-safe.
+func (p *Participant) MarkFailed() {
+	p.failed.Store(true)
+}
+
+// IsFailed reports whether this transit tunnel has been marked failed. When
+// true, the relay should drop incoming records for this tunnel without
+// re-attempting forwarding or logging an error.
+func (p *Participant) IsFailed() bool {
+	return p.failed.Load()
 }
 
 // SetLifetime updates the lifetime for this participant tunnel.

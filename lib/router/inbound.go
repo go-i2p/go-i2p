@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -16,6 +17,13 @@ import (
 	"github.com/go-i2p/logger"
 	"github.com/samber/oops"
 )
+
+// ErrTransitNextHopUnresolved signals that a transit tunnel's next hop could
+// not be resolved (no session / RouterInfo available). forwardToNextHop returns
+// it wrapped; handleTransitTunnelData uses errors.Is to detect the condition,
+// mark the participant failed, and tear the tunnel down so the failure is
+// logged once per tunnel rather than once per arriving record.
+var ErrTransitNextHopUnresolved = errors.New("transit next hop unresolvable")
 
 // InboundMessageHandler processes inbound tunnel messages and delivers them to I2CP sessions.
 // This component bridges tunnel endpoints with I2CP client sessions, enabling end-to-end
@@ -743,6 +751,20 @@ func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID
 		return oops.Errorf("participant tunnel is nil for tunnel %d", tunnelID)
 	}
 
+	// A transit tunnel already marked failed (its next hop proved unresolvable)
+	// drops subsequent records silently. The failure was logged once when it
+	// first occurred; re-attempting per packet would spam the log and the
+	// manager will expire the tunnel shortly. Returning nil keeps the caller
+	// from logging it again.
+	if participant.IsFailed() {
+		log.WithFields(logger.Fields{
+			"at":        "handleTransitTunnelData",
+			"tunnel_id": tunnelID,
+			"reason":    "tunnel_failed",
+		}).Debug("dropped transit record for already-failed tunnel")
+		return nil
+	}
+
 	// Previous-hop pinning: only the tunnel's previous hop holds the layer key
 	// and may feed this tunnel. Drop records arriving from any other peer.
 	// Unpinned participants and an unknown (zero) source are accepted.
@@ -784,6 +806,21 @@ func (h *InboundMessageHandler) handleTransitTunnelData(tunnelID tunnel.TunnelID
 
 	// Forward to the next hop
 	if err := h.forwardToNextHop(participant, nextHopID, decrypted); err != nil {
+		// A next-hop that cannot be resolved (no session / RouterInfo) is a
+		// persistent condition for this tunnel, not a transient one: mark the
+		// participant failed so subsequent records drop silently, and let the
+		// manager expire the tunnel. Log this once; returning nil prevents the
+		// caller from logging the same failure again per packet.
+		if errors.Is(err, ErrTransitNextHopUnresolved) {
+			participant.MarkFailed()
+			log.WithFields(logger.Fields{
+				"at":          "handleTransitTunnelData",
+				"tunnel_id":   tunnelID,
+				"next_hop_id": nextHopID,
+				"error":       err,
+			}).Error("Failed to forward decrypted transit data: next hop unresolvable, tearing down tunnel")
+			return nil
+		}
 		log.WithFields(logger.Fields{
 			"at":        "handleTransitTunnelData",
 			"tunnel_id": tunnelID,
@@ -852,7 +889,10 @@ func (h *InboundMessageHandler) forwardToNextHop(participant *tunnel.Participant
 			"next_hop_id": nextHopID,
 			"error":       err,
 		}).Debug("Failed to get session for transit forwarding (peer may be unavailable)")
-		return oops.Wrapf(err, "failed to get session for transit tunnel forwarding with ID %d", nextHopID)
+		// Tag with the sentinel so handleTransitTunnelData can distinguish a
+		// persistent next-hop failure (peer gone / RouterInfo unresolvable)
+		// from a transient forwarding error and tear the tunnel down once.
+		return oops.Wrapf(fmt.Errorf("%w: %w", ErrTransitNextHopUnresolved, err), "failed to get session for transit tunnel forwarding with ID %d", nextHopID)
 	}
 
 	// Queue the message for transmission

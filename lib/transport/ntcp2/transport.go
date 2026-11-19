@@ -2138,11 +2138,17 @@ func shouldRefreshRouterInfoOnDialFailure(err error) bool {
 // finalizeOutboundSession sets up the session object and records success metrics.
 // E-4 fix: Ensure unreserveSessionSlot is called on all failure paths.
 func (t *NTCP2Transport) finalizeOutboundSession(conn *ntcp2.Conn, routerHash data.Hash, routerHashBytes [32]byte, dialStart time.Time) (transport.TransportSession, error) {
-	session := t.setupSession(conn, routerHash)
+	session, slotReleased := t.setupSession(conn, routerHash)
 	if session == nil {
-		// setupSession failed (corrupt session map entry or other issues).
-		// We must unreserve the slot since we're not creating a session.
-		t.unreserveSessionSlot()
+		// setupSession failed to hand back an owned session (corrupt session map
+		// entry, or the peer already has an acceptedConn/session). setupSession
+		// releases the reservation itself on every nil path, so only release it
+		// here if it reports it did not — otherwise we double-decrement and drive
+		// sessionCount negative (the accounting bug behind the "would go negative"
+		// CRITICAL log).
+		if !slotReleased {
+			t.unreserveSessionSlot()
+		}
 		return nil, oops.Errorf("failed to set up session for %x: corrupt session map entry, connection closed", routerHashBytes[:8])
 	}
 	if n := t.getPeerConnNotifier(); n != nil {
@@ -2599,7 +2605,19 @@ func (t *NTCP2Transport) attachLocalRouterInfo(config *ntcp2.Config) error {
 	return nil
 }
 
-func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *NTCP2Session {
+// setupSession registers a freshly-dialled outbound connection in the session
+// map. It returns the live session for the peer (either the one it stored, or an
+// existing one it reused) and whether the caller's reserved session slot has
+// already been released.
+//
+// The slotReleased return is the single source of truth for slot accounting on
+// this path: setupSession releases the reservation itself whenever it does not
+// hand back an owned session (the peer already has a session/acceptedConn, or a
+// corrupt entry was discarded). The caller (finalizeOutboundSession) must
+// release the slot only when slotReleased is false, so a single reservation is
+// never released twice — the double-decrement that previously drove sessionCount
+// negative under the outbound reuse race.
+func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) (*NTCP2Session, bool) {
 	// Create session WITHOUT starting workers to avoid spawning goroutines
 	// that may be immediately discarded if an existing session wins the race.
 	session := NewNTCP2SessionDeferred(conn, t.ctx, t.logger)
@@ -2637,7 +2655,7 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 			}).Debug("setupSession: peer already has an accepted connection owned by Accept — abandoning redundant dial")
-			return nil
+			return nil, true
 		}
 		resolved := t.resolveExistingSession(existing, routerHash)
 		if resolved == nil {
@@ -2649,9 +2667,10 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 			t.logger.WithFields(map[string]interface{}{
 				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
 			}).Error("setupSession: corrupt session map entry deleted, connection already closed — caller must re-dial")
-			return nil
+			return nil, true
 		}
-		return resolved
+		// Reused an existing session; this dial's reservation was released above.
+		return resolved, true
 	}
 
 	// We won the store — start workers NOW
@@ -2678,7 +2697,8 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 
 	session.StartWorkers()
 
-	return session
+	// We own the session and its reservation; the caller must NOT release the slot.
+	return session, false
 }
 
 // resolveExistingSession safely extracts or promotes an existing session map
