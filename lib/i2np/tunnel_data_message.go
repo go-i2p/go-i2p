@@ -64,6 +64,23 @@ func (t *TunnelDataMessage) UnmarshalBinary(data []byte) error {
 		return oops.Errorf("tunnel data message payload wrong size: expected %d bytes, got %d", TunnelDataSize, len(messageData))
 	}
 
+	return t.parseBody(messageData)
+}
+
+// parseBody populates TunnelID and Data from a TunnelData body (the bytes that
+// follow the I2NP header). It is split out from UnmarshalBinary so the inbound
+// short-header path — which has already parsed the 9-byte header into the
+// embedded base — can populate the typed accessors without re-parsing a
+// 16-byte standard header that is not present on the wire. The body must be
+// exactly TunnelDataSize (1028) bytes: TunnelID(4) + IV(16) + EncryptedData(1008).
+func (t *TunnelDataMessage) parseBody(messageData []byte) error {
+	if len(messageData) != TunnelDataSize {
+		log.WithFields(map[string]interface{}{
+			"expected": TunnelDataSize,
+			"got":      len(messageData),
+		}).Error("tunnel data body wrong size")
+		return oops.Errorf("tunnel data message payload wrong size: expected %d bytes, got %d", TunnelDataSize, len(messageData))
+	}
 	t.TunnelID = buildrecord.TunnelID(binary.BigEndian.Uint32(messageData[:I2NPMessageIDSize]))
 	copy(t.Data[:], messageData[I2NPMessageIDSize:TunnelDataSize])
 	return nil

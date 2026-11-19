@@ -77,7 +77,15 @@ func (d *DataMessage) UnmarshalBinary(data []byte) error {
 	}
 
 	// Extract the data payload and parse it
-	messageData := d.BaseI2NPMessage.GetData()
+	return d.parseBody(d.BaseI2NPMessage.GetData())
+}
+
+// parseBody extracts the length-prefixed payload from a Data body (the bytes
+// that follow the I2NP header). It is split out from UnmarshalBinary so the
+// inbound short-header path — which has already parsed the 9-byte header into
+// the embedded base — can populate the typed accessors without re-parsing a
+// 16-byte standard header that is not present on the wire.
+func (d *DataMessage) parseBody(messageData []byte) error {
 	if len(messageData) < dataPayloadLengthFieldSize {
 		log.WithFields(logger.Fields{
 			"at":     "DataMessage.UnmarshalBinary",

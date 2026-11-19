@@ -26,8 +26,8 @@ func ParseI2NPFromBlock(block *ssu2noise.SSU2Block) (i2np.Message, error) {
 		log.Error("empty I2NP block data in SSU2 block")
 		return nil, oops.Errorf("empty I2NP block data")
 	}
-	msg := &i2np.BaseI2NPMessage{}
-	if err := msg.UnmarshalShortI2NP(block.Data); err != nil {
+	msg, err := i2np.ParseInboundShortI2NP(block.Data)
+	if err != nil {
 		log.WithError(err).Error("failed to unmarshal I2NP message from SSU2 block")
 		return nil, oops.Wrapf(err, "failed to unmarshal I2NP message")
 	}
@@ -53,8 +53,8 @@ func ParseI2NPFromSSU2(data []byte) (i2np.Message, error) {
 		log.Error("empty data in ParseI2NPFromSSU2")
 		return nil, oops.Errorf("empty I2NP data")
 	}
-	msg := &i2np.BaseI2NPMessage{}
-	if err := msg.UnmarshalShortI2NP(data); err != nil {
+	msg, err := i2np.ParseInboundShortI2NP(data)
+	if err != nil {
 		log.WithError(err).Error("failed to unmarshal I2NP message from SSU2")
 		return nil, oops.Wrapf(err, "failed to unmarshal I2NP message")
 	}

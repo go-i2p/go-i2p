@@ -223,8 +223,8 @@ func (u *BlockUnframer) parseI2NPBlock(data []byte) (i2np.Message, error) {
 		return nil, oops.Errorf("I2NP block data too short: %d bytes", len(data))
 	}
 
-	msg := &i2np.BaseI2NPMessage{}
-	if err := msg.UnmarshalShortI2NP(data); err != nil {
+	msg, err := i2np.ParseInboundShortI2NP(data)
+	if err != nil {
 		return nil, err
 	}
 

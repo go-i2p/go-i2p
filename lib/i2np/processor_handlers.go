@@ -590,9 +590,16 @@ func ParseECIESGarlicClove(data []byte) (*Garlic, error) {
 		return nil, oops.Wrapf(err, "failed to parse ECIES short I2NP message (type %d)", msgType)
 	}
 
+	// Promote the bare base into the concrete typed message when the wrapped
+	// type's handler asserts a typed carrier (Data=20 → PayloadCarrier). A LOCAL
+	// clove is re-dispatched through processMessageWithDepth, which would
+	// otherwise reject a bare base on the PayloadCarrier assertion. The promoted
+	// type embeds the same base, so MessageID/Expiration below are unchanged.
+	cloveMsg := promoteInboundMessage(baseMsg)
+
 	clove := GarlicClove{
 		DeliveryInstructions: *deliveryInstructions,
-		Message:              baseMsg,
+		Message:              cloveMsg,
 	}
 
 	return &Garlic{
