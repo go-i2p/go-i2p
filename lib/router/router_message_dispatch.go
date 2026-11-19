@@ -407,6 +407,20 @@ func (m *sourcedMessage) GetTunnelID() buildrecord.TunnelID {
 	return 0
 }
 
+// GetData forwards to the underlying message when it is a DataCarrier (the
+// method is not promoted from the embedded i2np.Message interface, which does
+// not declare it). Without this, the wrapper would fail the DataCarrier
+// assertion in the processor's extractBuildMessageData, so an inbound
+// ShortTunnelBuild (type 25) or VariableTunnelBuild (type 23) — which the
+// router always wraps here to thread the previous hop — would be rejected
+// before its build records were ever parsed. A non-DataCarrier message yields nil.
+func (m *sourcedMessage) GetData() []byte {
+	if dc, ok := m.Message.(i2np.DataCarrier); ok {
+		return dc.GetData()
+	}
+	return nil
+}
+
 // routeDatabaseLookup handles DatabaseLookup message routing with optional floodfill handling.
 func (r *Router) routeDatabaseLookup(msg i2np.Message, mr *i2np.I2NPMessageDispatcher, fs *netdb.FloodfillServer) error {
 	if fs != nil && fs.IsEnabled() {
