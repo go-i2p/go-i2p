@@ -96,6 +96,12 @@ netdb:
   floodfill_enabled: false
   # Require netId and router.version on inbound RouterInfos
   strict_routerinfo_network_validation: true
+  # I2P network ID this router advertises and accepts. "2" is the production
+  # I2P network (matches i2pd). Set to another value (e.g. "3") to join an
+  # isolated testnet: the local RouterInfo advertises this netId and inbound
+  # RouterInfos carrying a different netId are rejected. It must match the
+  # netId used by the test network's RouterInfos and reseed data.
+  net_id: "2"
   # Enable source-based RouterInfo admission limits when cache reaches this usage percentage
   routerinfo_admission_pressure_threshold_pct: 80
 

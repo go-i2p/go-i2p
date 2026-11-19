@@ -191,8 +191,35 @@ router:
   testnet: true
 ```
 
-Testnet mode does not change the `netId` this router advertises or accepts, so
-the test network must still use RouterInfos carrying the production `netId`.
+Testnet mode does not change the `netId` this router advertises or accepts. By
+default go-i2p uses the production `netId` (`2`), so a test network must either
+use RouterInfos carrying that `netId` or you must set `netdb.net_id` to the test
+network's ID (see below).
+
+### Configuring the network ID
+
+The `netId` is the I2P network identifier a router advertises in its RouterInfo
+and expects on inbound RouterInfos. go-i2p defaults to `2` (the production I2P
+network, matching i2pd) and rejects RouterInfos advertising any other `netId`,
+so a router on an isolated testnet would otherwise refuse every testnet peer.
+
+Set `netdb.net_id` to the test network's ID (commonly `3`) to both advertise and
+accept it:
+
+```shell
+go-i2p --netdb.net-id 3
+```
+
+```yaml
+# or in $HOME/.go-i2p/config.yaml
+netdb:
+  net_id: "3"
+```
+
+The value must match the `netId` carried by the test network's RouterInfos and
+reseed data, otherwise the NetDB will reject the peers it learns. Combine it with
+`router.testnet: true` (no bootstrap peer floor) when running a small isolated
+network.
 
 To keep the floor but lower it — a small private network that wants the
 emergency-reseed safety net without waiting on 40 peers — set
