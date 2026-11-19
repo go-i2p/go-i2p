@@ -35,6 +35,20 @@ router:
   # i2p.router.net.upnp.
   # Default: true.
   upnp_enabled: true
+  # External address override: the host[:port] this router advertises in its
+  # RouterInfo transport addresses, overriding auto-detection. Set it when the
+  # router sits behind a NAT/firewall with no UPnP/NAT-PMP and no
+  # publicly-routable interface (e.g. a Docker container), but you have
+  # port-forwarded the transport ports and know the reachable public address.
+  # When set, NTCP2 and SSU2 publish host=/port= for this address instead of a
+  # caps-only address, so peers (i2pd/Java) can open inbound connections back
+  # to us. The port is optional: omit it to advertise each transport's own bound
+  # port with the overridden host. Use a publicly-routable IP so the published
+  # address also flips our caps from U (unreachable) to R (reachable).
+  # Hidden mode still wins: with hidden: true no transport addresses are
+  # published at all, override included.
+  # Default: "" (auto-detect).
+  # external_address: "203.0.113.7:8888"
   # Testnet mode: run against a small, isolated test network.
   # When true the router expresses no bootstrap peer floor. Normally go-i2p
   # refuses to finish starting until it holds at least 40 RouterInfos (or

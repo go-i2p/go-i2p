@@ -242,7 +242,11 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 	// advertise it verbatim (with the bound port unless the override carries
 	// its own port) and publish host=/port= regardless of the bound
 	// interface's routability, bypassing the introducer-only branch.
-	host, portStr, forced := applyExternalOverride(transport.config.Load().ExternalAddress, host, portStr)
+	var override string
+	if cfg := transport.config.Load(); cfg != nil {
+		override = cfg.ExternalAddress
+	}
+	host, portStr, forced := applyExternalOverride(override, host, portStr)
 
 	introducers := transport.GetIntroducers()
 	options := buildSSU2Options(host, portStr, transport, introducers, forced)
