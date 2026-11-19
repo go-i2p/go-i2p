@@ -213,6 +213,46 @@ func NewNTCP2Transport(identity router_info.RouterInfo, config *Config, keystore
 	return transport, nil
 }
 
+// networkIDFromRouterInfo extracts the I2P network ID advertised in a
+// RouterInfo's "netId" option and returns it as the uint8 the go-noise
+// handshake writes into (and requires of) the message-1 options block.
+//
+// Deriving the handshake networkID from the transport's own identity RouterInfo
+// — rather than leaving go-noise's hardcoded default of 2 — is what makes a
+// non-mainline network (netId != 2) work end to end: i2pd rejects a session
+// whose handshake networkID does not match its own ("SessionRequest networkID 2
+// mismatch. Expected 5"), so the wire value must equal the netId we advertise.
+//
+// Returns 0 when the option is absent or unparseable, which go-noise treats as
+// "use the main-network default (2)".
+func networkIDFromRouterInfo(ri router_info.RouterInfo) uint8 {
+	options := ri.Options()
+	opts, err := options.ToGoMap()
+	if err != nil {
+		return 0
+	}
+	raw, ok := opts["netId"]
+	if !ok || raw == "" {
+		return 0
+	}
+	n, err := strconv.ParseUint(raw, 10, 8)
+	if err != nil {
+		return 0
+	}
+	return uint8(n)
+}
+
+// applyNetworkIDFromIdentity sets the go-noise handshake networkID from the
+// given identity RouterInfo's netId, leaving the default when unset.
+func applyNetworkIDFromIdentity(config *ntcp2.Config, identity router_info.RouterInfo) {
+	if config == nil {
+		return
+	}
+	if id := networkIDFromRouterInfo(identity); id != 0 {
+		config.WithNetworkID(id)
+	}
+}
+
 // createNTCP2Config creates and initializes the NTCP2 configuration from router identity.
 func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFunc) (*ntcp2.Config, error) {
 	identHash, err := identity.IdentHash()
@@ -224,6 +264,7 @@ func createNTCP2Config(identity router_info.RouterInfo, cancel context.CancelFun
 		cancel()
 		return nil, err
 	}
+	applyNetworkIDFromIdentity(ntcp2Config, identity)
 	return applyNTCP2FrameSettings(ntcp2Config), nil
 }
 
@@ -1779,6 +1820,7 @@ func (t *NTCP2Transport) createNTCP2ConfigFromIdentity(ident router_info.RouterI
 		t.logger.WithError(err).Error("Failed to create new NTCP2 config for identity update")
 		return nil, WrapNTCP2Error(err, "updating identity")
 	}
+	applyNetworkIDFromIdentity(ntcp2Config, ident)
 	return applyNTCP2FrameSettings(ntcp2Config), nil
 }
 
@@ -2431,6 +2473,13 @@ func (t *NTCP2Transport) createNTCP2ConfigForAddress(routerInfo router_info.Rout
 	if err != nil {
 		return nil, WrapNTCP2Error(err, "creating NTCP2 config")
 	}
+	// The initiator writes its OWN network ID into msg1's options block, and the
+	// responder requires it to match its own — so both sides must agree. Derive it
+	// from our identity RouterInfo (which carries the configured netId), not the
+	// peer's, so a testnet dial does not send the mainline default of 2.
+	t.identityMu.RLock()
+	applyNetworkIDFromIdentity(config, t.identity)
+	t.identityMu.RUnlock()
 	// Raise the outbound frame budget to the spec maximum before anything else
 	// touches this config: go-noise's 16 KiB default would cap every message
 	// this session can send, and the session drops rather than fragments

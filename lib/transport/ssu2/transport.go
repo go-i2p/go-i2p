@@ -300,6 +300,43 @@ func conditionallyInitKeyManagement(t *SSU2Transport, config *Config, ssu2Config
 	return nil
 }
 
+// networkIDFromRouterInfo extracts the I2P network ID advertised in a
+// RouterInfo's "netId" option and returns it as the uint8 SSU2 writes into
+// header byte 14 of every long-header message (and requires of inbound ones).
+//
+// Deriving it from the transport's own identity RouterInfo — rather than
+// leaving go-noise's hardcoded default of 2 — is what makes a non-mainline
+// network (netId != 2) work: a peer on a different network fails the handshake
+// fast, so the wire value must equal the netId we advertise. Returns 0 when the
+// option is absent or unparseable, which go-noise treats as "main network (2)".
+func networkIDFromRouterInfo(ri router_info.RouterInfo) uint8 {
+	options := ri.Options()
+	opts, err := options.ToGoMap()
+	if err != nil {
+		return 0
+	}
+	raw, ok := opts["netId"]
+	if !ok || raw == "" {
+		return 0
+	}
+	n, err := strconv.ParseUint(raw, 10, 8)
+	if err != nil {
+		return 0
+	}
+	return uint8(n)
+}
+
+// applyNetworkIDFromIdentity sets the SSU2 handshake networkID from the given
+// identity RouterInfo's netId, leaving go-noise's default when unset.
+func applyNetworkIDFromIdentity(cfg *ssu2noise.SSU2Config, identity router_info.RouterInfo) {
+	if cfg == nil {
+		return
+	}
+	if id := networkIDFromRouterInfo(identity); id != 0 {
+		cfg.NetworkID = id
+	}
+}
+
 // createSSU2Config creates an SSU2Config from the router identity.
 func createSSU2Config(identity router_info.RouterInfo) (*ssu2noise.SSU2Config, error) {
 	identHash, err := identity.IdentHash()
@@ -310,6 +347,7 @@ func createSSU2Config(identity router_info.RouterInfo) (*ssu2noise.SSU2Config, e
 	if err != nil {
 		return nil, WrapSSU2Error(err, "creating SSU2 config")
 	}
+	applyNetworkIDFromIdentity(cfg, identity)
 	cfg = cfg.WithRouterInfoValidator(ssu2noise.DefaultRouterInfoValidator)
 	return cfg, nil
 }
@@ -1401,7 +1439,8 @@ func resolveRemoteAddr(routerInfo router_info.RouterInfo) (*net.UDPAddr, error) 
 // createBaseDialConfig creates an SSU2 dial config with our identity and crypto keys.
 func (t *SSU2Transport) createBaseDialConfig() (*ssu2noise.SSU2Config, error) {
 	t.identityMu.RLock()
-	identHash, err := t.identity.IdentHash()
+	ourRI := t.identity
+	identHash, err := ourRI.IdentHash()
 	t.identityMu.RUnlock()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to get our identity hash")
@@ -1411,6 +1450,9 @@ func (t *SSU2Transport) createBaseDialConfig() (*ssu2noise.SSU2Config, error) {
 	if err != nil {
 		return nil, WrapSSU2Error(err, "creating dial config")
 	}
+	// Write our own network ID into the handshake headers so a testnet dial does
+	// not send the mainline default of 2 (the peer requires a match).
+	applyNetworkIDFromIdentity(dialConfig, ourRI)
 
 	if err := initializeCryptoKeys(dialConfig, t.keystore); err != nil {
 		return nil, err

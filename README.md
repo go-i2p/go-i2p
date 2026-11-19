@@ -198,10 +198,14 @@ network's ID (see below).
 
 ### Configuring the network ID
 
-The `netId` is the I2P network identifier a router advertises in its RouterInfo
-and expects on inbound RouterInfos. go-i2p defaults to `2` (the production I2P
-network, matching i2pd) and rejects RouterInfos advertising any other `netId`,
-so a router on an isolated testnet would otherwise refuse every testnet peer.
+The `netId` is the I2P network identifier a router advertises in its RouterInfo,
+expects on inbound RouterInfos, and writes into the NTCP2/SSU2 handshake (the
+message-1 options block and SSU2 header byte 14). go-i2p defaults to `2` (the
+production I2P network, matching i2pd) and rejects RouterInfos advertising any
+other `netId`, so a router on an isolated testnet would otherwise refuse every
+testnet peer. The handshake value is derived from the same configured `netId`, so
+a non-mainline network interoperates with peers such as i2pd (which otherwise
+rejects a mismatched handshake with `networkID 2 mismatch. Expected 5`).
 
 Set `netdb.net_id` to the test network's ID (commonly `3`) to both advertise and
 accept it:

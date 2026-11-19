@@ -495,7 +495,8 @@ func (t *SSU2Transport) buildCharlieDialConfig(charlieRI router_info.RouterInfo,
 // initializeCharlieDialConfig creates and initializes the base SSU2Config for dialing.
 func (t *SSU2Transport) initializeCharlieDialConfig(charlieHash data.Hash) (*ssu2noise.SSU2Config, error) {
 	t.identityMu.RLock()
-	ourHash, err := t.identity.IdentHash()
+	ourRI := t.identity
+	ourHash, err := ourRI.IdentHash()
 	t.identityMu.RUnlock()
 	if err != nil {
 		return nil, oops.Wrapf(err, "failed to get our identity hash")
@@ -505,6 +506,9 @@ func (t *SSU2Transport) initializeCharlieDialConfig(charlieHash data.Hash) (*ssu
 	if err != nil {
 		return nil, WrapSSU2Error(err, "creating Charlie dial config")
 	}
+	// Write our own network ID into the handshake headers so a testnet dial does
+	// not send the mainline default of 2 (the peer requires a match).
+	applyNetworkIDFromIdentity(dialConfig, ourRI)
 	if err := initializeCryptoKeys(dialConfig, t.keystore); err != nil {
 		return nil, err
 	}
