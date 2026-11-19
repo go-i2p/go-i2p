@@ -127,6 +127,12 @@ const (
 	// DefaultRouterInfoAdmissionPressurePct is the cache-pressure percentage
 	// at which per-source admission limits start to apply.
 	DefaultRouterInfoAdmissionPressurePct = 80
+	// DefaultNetID is the I2P network identifier go-i2p advertises and accepts
+	// by default. "2" is the production I2P network (matches i2pd). Set
+	// netdb.net_id to another value (e.g. "3") to join an isolated testnet;
+	// RouterInfos carrying a different netId are then rejected and the local
+	// RouterInfo advertises the configured value.
+	DefaultNetID = "2"
 )
 
 // Bootstrap defaults. Moved from: bootstrap.go, defaults.go

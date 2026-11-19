@@ -485,6 +485,7 @@ func (r *Router) initializeNetDB() error {
 	r.netdb = netdb.NewStdNetDBWithExpirationCheck(r.cfg.NetDB.Path, r.cfg.NetDB.ExpirationCheckInterval)
 	r.netdb.SetMaxRouterInfos(r.cfg.NetDB.MaxRouterInfos)
 	r.netdb.SetStrictRouterInfoNetworkValidation(r.cfg.NetDB.StrictRouterInfoNetworkValidation)
+	r.netdb.SetNetID(r.cfg.NetDB.NetID)
 	r.netdb.SetRouterInfoAdmissionPressureThreshold(r.cfg.NetDB.RouterInfoAdmissionPressureThresholdPct)
 	// Honor netdb.lease_set_refresh_threshold: a cached LeaseSet within this much
 	// of expiring is proactively refreshed in the background. Before this the

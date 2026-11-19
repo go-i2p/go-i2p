@@ -132,6 +132,10 @@ func (p *routerInfoProvider) buildRouterInfoOptions() keys.RouterInfoOptions {
 	}
 	if cfg != nil && cfg.NetDB != nil {
 		opts.Floodfill = cfg.NetDB.FloodfillEnabled
+		// Advertise the configured network ID (default "2" production; "3" for
+		// testnet). Must match the netId the NetDB expects on inbound RouterInfos
+		// (netdb.SetNetID), otherwise peers on the same network reject us.
+		opts.NetID = cfg.NetDB.NetID
 	}
 
 	p.monitorMu.RLock()

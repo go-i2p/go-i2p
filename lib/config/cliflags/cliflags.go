@@ -140,6 +140,8 @@ func registerNetDBFlags(cmd *cobra.Command) {
 		"Operate as a floodfill router")
 	cmd.PersistentFlags().Bool("netdb.strict-routerinfo-network-validation", defaults.NetDB.StrictRouterInfoNetworkValidation,
 		"Require netId and router.version on inbound RouterInfos")
+	cmd.PersistentFlags().String("netdb.net-id", defaults.NetDB.NetID,
+		"I2P network ID this router advertises and accepts (2 = production; set 3 for testnet)")
 	cmd.PersistentFlags().Int("netdb.routerinfo-admission-pressure-threshold-pct", defaults.NetDB.RouterInfoAdmissionPressureThresholdPct,
 		"Cache pressure percentage where RouterInfo source admission limits engage")
 }
@@ -412,6 +414,7 @@ func bindNetDBFlags(cmd *cobra.Command, v *viper.Viper) error {
 		{"netdb.exploration_interval", "netdb.exploration-interval"},
 		{"netdb.floodfill_enabled", "netdb.floodfill-enabled"},
 		{"netdb.strict_routerinfo_network_validation", "netdb.strict-routerinfo-network-validation"},
+		{"netdb.net_id", "netdb.net-id"},
 		{"netdb.routerinfo_admission_pressure_threshold_pct", "netdb.routerinfo-admission-pressure-threshold-pct"},
 	})
 }

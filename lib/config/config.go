@@ -132,6 +132,7 @@ func setNetDBDefaults(defaults ConfigDefaults) {
 		{"netdb.exploration_interval", defaults.NetDB.ExplorationInterval},
 		{"netdb.floodfill_enabled", defaults.NetDB.FloodfillEnabled},
 		{"netdb.strict_routerinfo_network_validation", defaults.NetDB.StrictRouterInfoNetworkValidation},
+		{"netdb.net_id", defaults.NetDB.NetID},
 		{"netdb.routerinfo_admission_pressure_threshold_pct", defaults.NetDB.RouterInfoAdmissionPressureThresholdPct},
 	})
 }
@@ -337,6 +338,7 @@ func currentNetDBConfig() NetDBDefaults {
 		ExplorationInterval:                     viper.GetDuration("netdb.exploration_interval"),
 		FloodfillEnabled:                        viper.GetBool("netdb.floodfill_enabled"),
 		StrictRouterInfoNetworkValidation:       viper.GetBool("netdb.strict_routerinfo_network_validation"),
+		NetID:                                   viper.GetString("netdb.net_id"),
 		RouterInfoAdmissionPressureThresholdPct: viper.GetInt("netdb.routerinfo_admission_pressure_threshold_pct"),
 	}
 }
@@ -392,6 +394,7 @@ func buildNetDBConfig() *NetDBConfig {
 		ExplorationInterval:                     viper.GetDuration("netdb.exploration_interval"),
 		FloodfillEnabled:                        viper.GetBool("netdb.floodfill_enabled"),
 		StrictRouterInfoNetworkValidation:       viper.GetBool("netdb.strict_routerinfo_network_validation"),
+		NetID:                                   viper.GetString("netdb.net_id"),
 		RouterInfoAdmissionPressureThresholdPct: viper.GetInt("netdb.routerinfo_admission_pressure_threshold_pct"),
 	}
 }

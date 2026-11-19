@@ -378,6 +378,18 @@ func (db *StdNetDB) SetStrictRouterInfoNetworkValidation(strict bool) {
 	db.strictRouterInfoNetworkValidation = strict
 }
 
+// SetNetID sets the expected I2P network identifier. RouterInfos advertising a
+// different netId are rejected during ingestion (when strict validation is on).
+// The default is the production network ("2"); set another value (e.g. "3") to
+// operate on an isolated testnet. Keep this in sync with the netId advertised on
+// the local RouterInfo. An empty value is ignored and leaves the current netId.
+func (db *StdNetDB) SetNetID(netID string) {
+	if netID == "" {
+		return
+	}
+	db.routerInfoExpectedNetID = netID
+}
+
 // SetRouterInfoAdmissionPressureThreshold updates the cache pressure
 // percentage at which source-based admission limits engage.
 func (db *StdNetDB) SetRouterInfoAdmissionPressureThreshold(percent int) {
@@ -1191,11 +1203,13 @@ func (db *StdNetDB) decompressAndParseRouterInfo(data []byte) (router_info.Route
 }
 
 // validateRouterInfo verifies hash and signature of RouterInfo.
-// expectedNetID is the I2P network identifier go-i2p participates in. i2pd's
-// production network uses netID 2; a RouterInfo advertising a different (or no)
-// netID belongs to another network and is rejected, matching i2pd which marks
-// such routers unreachable. Keep this in sync with the netId option set on the
-// local RouterInfo.
+// expectedNetID is the default I2P network identifier go-i2p participates in.
+// i2pd's production network uses netID 2; a RouterInfo advertising a different
+// (or no) netID belongs to another network and is rejected, matching i2pd which
+// marks such routers unreachable. This is only the default: the effective value
+// is db.routerInfoExpectedNetID, settable via netdb.SetNetID (driven by the
+// netdb.net_id config knob) to join an isolated testnet. Keep it in sync with
+// the netId option set on the local RouterInfo.
 const expectedNetID = "2"
 
 func (db *StdNetDB) validateRouterInfo(key common.Hash, ri router_info.RouterInfo) error {

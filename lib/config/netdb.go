@@ -29,6 +29,13 @@ type NetDBConfig struct {
 	// StrictRouterInfoNetworkValidation enforces required RouterInfo network
 	// options (netId and router.version) on ingestion.
 	StrictRouterInfoNetworkValidation bool
+	// NetID is the I2P network identifier this router advertises and accepts.
+	// The default "2" is the production I2P network. Set to another value
+	// (e.g. "3") to join an isolated testnet: the local RouterInfo advertises
+	// this netId and inbound RouterInfos carrying a different netId are
+	// rejected. Keep it in sync with the netId used by the test network's
+	// RouterInfos and reseed data.
+	NetID string
 	// RouterInfoAdmissionPressureThresholdPct controls when per-source
 	// admission limits become active as cache pressure rises.
 	RouterInfoAdmissionPressureThresholdPct int
@@ -43,5 +50,6 @@ var DefaultNetDBConfig = NetDBConfig{
 	LeaseSetRefreshThreshold:                DefaultNetDBLeaseSetRefreshThreshold,
 	ExplorationInterval:                     DefaultNetDBExplorationInterval,
 	StrictRouterInfoNetworkValidation:       true,
+	NetID:                                   DefaultNetID,
 	RouterInfoAdmissionPressureThresholdPct: DefaultRouterInfoAdmissionPressurePct,
 }

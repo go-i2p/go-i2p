@@ -132,6 +132,10 @@ type NetDBDefaults struct {
 	// Default: true
 	StrictRouterInfoNetworkValidation bool
 
+	// NetID is the I2P network identifier advertised and accepted.
+	// Default: "2" (production I2P network)
+	NetID string
+
 	// RouterInfoAdmissionPressureThresholdPct sets the cache utilization
 	// percentage where source-based RouterInfo admission limits engage.
 	// Default: 80
@@ -511,6 +515,7 @@ func buildNetDBDefaults(workingDir string) NetDBDefaults {
 		ExplorationInterval:                     DefaultNetDBExplorationInterval,
 		FloodfillEnabled:                        false,
 		StrictRouterInfoNetworkValidation:       true,
+		NetID:                                   DefaultNetID,
 		RouterInfoAdmissionPressureThresholdPct: DefaultRouterInfoAdmissionPressurePct,
 	}
 }
