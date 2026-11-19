@@ -129,9 +129,23 @@ func (r *Router) wireTunnelGatewayHandler() {
 	if r.tunnelManager != nil {
 		pool = r.tunnelManager.GetInboundPool()
 	}
+	processor := r.messageRouter.GetProcessor()
 	r.messageRouter.GetProcessor().SetTunnelGatewayHandler(&tunnelGatewayDispatcher{
 		inboundPool: pool,
 		sessions:    r,
+		localDeliver: func(_ tunnel.TunnelID, payload []byte) error {
+			// Zero-hop inbound: we are the endpoint, so parse the inner I2NP and
+			// dispatch it through the processor (DTLocal), mirroring the
+			// control-plane endpoint's handler.
+			inner := &i2np.BaseI2NPMessage{}
+			if err := inner.UnmarshalBinary(payload); err != nil {
+				if err2 := inner.UnmarshalShortI2NP(payload); err2 != nil {
+					return oops.Errorf("parse inner I2NP for zero-hop tunnel: %v", err2)
+				}
+			}
+			inner.SetReceivedViaTunnel(true)
+			return processor.ProcessMessage(inner)
+		},
 	})
 	log.WithFields(logger.Fields{"at": "initializeMessageRouter"}).Debug("TunnelGateway IBGW dispatcher wired into message processor")
 }
@@ -148,6 +162,12 @@ type tunnelGatewayDispatcher struct {
 	// sessions obtains the transport session to hop 0 so the layered records can
 	// be handed off as type-18 TunnelData.
 	sessions i2np.SessionProvider
+	// localDeliver processes an opaque payload in our own router context. It is
+	// used for zero-hop inbound tunnels, where we are simultaneously the gateway
+	// and the endpoint: there is no remote hop 0 to forward layered records to,
+	// so the inner I2NP is dispatched straight to the message processor (DTLocal
+	// semantics), exactly as the tunnel's registered control-plane endpoint would.
+	localDeliver func(tunnelID tunnel.TunnelID, payload []byte) error
 }
 
 // HandleGateway injects a TunnelGateway payload into its inbound tunnel.
@@ -190,6 +210,17 @@ func (d *tunnelGatewayDispatcher) injectIntoInboundTunnel(tunnelID tunnel.Tunnel
 		return oops.Errorf("TunnelGateway: inbound tunnel %d is not ready; cannot inject", tunnelID)
 	}
 
+	// Zero-hop inbound tunnel: we are simultaneously the gateway (IBGW) and the
+	// endpoint (IBEP), so there is no remote hop 0 to forward layered records to
+	// and no per-hop layer set to apply (the build short-circuited before
+	// retaining any). The payload is destined for our own router context, so
+	// dispatch it locally (DTLocal) rather than trying to build a creator-side
+	// gateway — which would fail with ErrNoLayerKeys. This is the path a NAT'd
+	// router hits constantly after auto-falling-back to zero-hop inbound tunnels.
+	if len(state.Hops) == 0 {
+		return d.deliverLocal(tunnelID, payload)
+	}
+
 	// The creator-side gateway applies every hop's layer and fragments to the
 	// tunnel block size. DTLocal delivery: the tunnel's endpoint consumes the
 	// payload in its own router context, which is how a gateway forwards traffic
@@ -230,6 +261,28 @@ func (d *tunnelGatewayDispatcher) injectIntoInboundTunnel(tunnelID tunnel.Tunnel
 		"records":         len(records),
 		"payload_size":    len(payload),
 	}).Debug("TunnelGateway: injected payload into inbound tunnel as type-18 records")
+	return nil
+}
+
+// deliverLocal dispatches an opaque payload to our own router context, the
+// DTLocal semantics a zero-hop inbound tunnel's endpoint would apply. It parses
+// the inner I2NP (full header, then short-header fallback) and feeds it to the
+// message processor, marking it tunnel-delivered for the DatabaseStore
+// reply-token security rule — mirroring InboundMessageHandler's control-plane
+// handler. A zero-hop tunnel has no remote hop 0, so this replaces the
+// layer-and-forward path that multi-hop inbound tunnels use.
+func (d *tunnelGatewayDispatcher) deliverLocal(tunnelID tunnel.TunnelID, payload []byte) error {
+	if d.localDeliver == nil {
+		return oops.Errorf("TunnelGateway: zero-hop inbound tunnel %d has no local delivery path", tunnelID)
+	}
+	if err := d.localDeliver(tunnelID, payload); err != nil {
+		return oops.Wrapf(err, "TunnelGateway: failed to deliver payload locally for zero-hop tunnel %d", tunnelID)
+	}
+	log.WithFields(logger.Fields{
+		"outer_tunnel_id": tunnelID,
+		"payload_size":    len(payload),
+		"hop_count":       0,
+	}).Debug("TunnelGateway: delivered payload locally for zero-hop inbound tunnel")
 	return nil
 }
 
