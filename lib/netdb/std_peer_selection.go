@@ -29,17 +29,32 @@ import (
 const maxRouterInfoAge = 48 * time.Hour
 
 // capsAllowsTunnelParticipation returns true when the router's caps string
-// indicates it is willing and able to participate as a tunnel hop. Per the
-// I2P protocol, a router that does not advertise 'R' (reachable) cannot
-// receive forwarded build records from a preceding hop, and a router that
-// advertises 'H' (hidden) refuses to participate in others' tunnels.
-// RouterInfo.RouterCapabilities() may include a leading I2P length byte,
-// so substring matching is used rather than equality.
+// indicates it is willing to participate as a tunnel hop. The caps string is
+// treated as an explicit opt-out signal only: a router is excluded when it
+// advertises 'H' (hidden — refuses to participate in others' tunnels) or 'U'
+// (unreachable — it declares it cannot receive forwarded build records from a
+// preceding hop).
+//
+// The 'R' (reachable) letter is deliberately NOT required. Reachability is
+// enforced independently by hasReachableAddress, which only admits peers with a
+// usable NTCP2/SSU2 host:port or SSU2 introducer. Requiring 'R' here was too
+// strict: i2pd and many real routers (notably floodfills) advertise caps such
+// as "Of" (bandwidth tier 'O' + floodfill 'f') without any reachability letter,
+// so demanding 'R' collapsed the entire candidate set to zero and no tunnel
+// could ever form. A published host:port is treated as reachable by default,
+// matching Java I2P and i2pd behavior.
+//
+// RouterInfo.RouterCapabilities() may include a leading I2P length byte, so
+// substring matching is used rather than equality.
 func capsAllowsTunnelParticipation(caps string) bool {
-	if !strings.ContainsRune(caps, 'R') {
+	// 'H' (hidden) and 'U' (unreachable) are explicit opt-outs from tunnel
+	// participation. 'U' wins over 'R' when both are present (a malformed
+	// advertisement): the router's own "I cannot be reached" declaration is the
+	// authoritative signal.
+	if strings.ContainsRune(caps, 'H') {
 		return false
 	}
-	if strings.ContainsRune(caps, 'H') {
+	if strings.ContainsRune(caps, 'U') {
 		return false
 	}
 	return true
@@ -125,7 +140,7 @@ type peerFilterStats struct {
 	skippedNotReachable int // no NTCP2/SSU2 direct address and no SSU2 introducer
 	skippedHashError    int
 	skippedStale        int
-	skippedNoRCap       int // caps lacks 'R' or advertises 'H' — cannot be a tunnel hop
+	skippedNoRCap       int // caps advertises 'U' or 'H' (explicit opt-out) — cannot be a tunnel hop
 	directCount         int // accepted with direct NTCP2 or SSU2 connectivity
 	viaIntroducer       int // accepted via SSU2 introducers
 }
@@ -214,19 +229,21 @@ func classifyStalePeer(riHash common.Hash, tracker *PeerTracker, stats *peerFilt
 	return false
 }
 
-// shouldSkipNoCaps checks if the peer lacks required capabilities for tunnel participation.
+// shouldSkipNoCaps checks if the peer's capabilities opt it out of tunnel
+// participation.
 func shouldSkipNoCaps(ri router_info.RouterInfo, riHash common.Hash, stats *peerFilterStats) bool {
-	// Tunnel hop participation requires the 'R' (reachable) capability and
-	// disqualifies routers advertising 'H' (hidden). Without this filter,
-	// 'U' (unreachable) and hidden peers are picked as middle/end hops, the
-	// preceding hop fails to forward the build record to them, and every
-	// exploratory build expires without a reply (RCA: 100% exploratory
-	// tunnel build expiration).
+	// Tunnel hop participation is disqualifed only by an explicit opt-out: 'H'
+	// (hidden) or 'U' (unreachable). Without this filter, hidden and unreachable
+	// peers are picked as middle/end hops, the preceding hop fails to forward the
+	// build record to them, and every exploratory build expires without a reply
+	// (RCA: 100% exploratory tunnel build expiration). The 'R' letter is not
+	// required — reachability is enforced by hasReachableAddress — so routers
+	// advertising caps like i2pd's "Of" remain eligible.
 	if !capsAllowsTunnelParticipation(ri.RouterCapabilities()) {
 		log.WithFields(logger.Fields{
 			"peer_hash": logutil.HashPrefixPlain(riHash),
 			"caps":      ri.RouterCapabilities(),
-			"reason":    "caps_lacks_R_or_advertises_H",
+			"reason":    "caps_advertises_U_or_H",
 		}).Debug("Skipping peer ineligible to participate in tunnels")
 		stats.skippedNoRCap++
 		return true
