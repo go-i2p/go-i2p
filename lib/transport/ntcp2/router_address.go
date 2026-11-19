@@ -136,13 +136,58 @@ func prepareRouterAddressComponents(transport *NTCP2Transport) (host, port strin
 
 	// Load config atomically
 	cfg := transport.config.Load()
-	options, err = buildRouterAddressOptions(host, port, staticKey, cfg.Config)
+
+	// Operator override: when router.external_address is set to a valid IP,
+	// advertise it verbatim (with the bound port unless the override carries
+	// its own port) and publish host=/port= regardless of the bound
+	// interface's routability. This is the only way a router with no gateway
+	// and no public interface (e.g. Docker) can advertise an inbound address.
+	host, port, forced := applyExternalOverride(cfg.ExternalAddress, host, port)
+
+	options, err = buildRouterAddressOptions(host, port, staticKey, cfg.Config, forced)
 	if err != nil {
 		logOptionsBuildError(err)
 		return "", "", nil, err
 	}
 
 	return host, port, options, nil
+}
+
+// applyExternalOverride applies the operator's router.external_address override.
+// When override is a valid IP literal (optionally host:port), it replaces host
+// (and port, when the override carries one) and returns forced=true so the
+// caller publishes host=/port= even though the bound interface is not publicly
+// routable. An empty or invalid override leaves host/port untouched and returns
+// forced=false, preserving auto-detection.
+func applyExternalOverride(override, host, port string) (string, string, bool) {
+	if override == "" {
+		return host, port, false
+	}
+	oh, op, ok := parseExternalOverride(override)
+	if !ok {
+		log.WithField("external_address", override).
+			Warn("router.external_address is not a valid IP or host:port; ignoring override")
+		return host, port, false
+	}
+	if op != "" {
+		port = op
+	}
+	return oh, port, true
+}
+
+// parseExternalOverride parses an operator external-address override into a host
+// IP literal and an optional port. Accepts "ip" or "ip:port" (bracketed IPv6
+// "ip]:port" too). Returns ok=false when the host component is not a valid IP.
+func parseExternalOverride(override string) (host, port string, ok bool) {
+	h := override
+	if h2, p, err := net.SplitHostPort(override); err == nil {
+		h, port = h2, p
+	}
+	ip := net.ParseIP(strings.TrimSpace(h))
+	if ip == nil {
+		return "", "", false
+	}
+	return ip.String(), port, true
 }
 
 // createNTCP2RouterAddress creates an NTCP2 RouterAddress with the appropriate cost.
@@ -421,13 +466,16 @@ func validateAndExtractStaticKey(transport *NTCP2Transport) (string, error) {
 // - Static key 's': 32 bytes binary (X25519 public key), 44 bytes I2P base64-encoded
 // - IV 'i': 16 bytes binary (big-endian), 24 bytes I2P base64-encoded
 // Returns the options map and an error if validation fails.
-func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.Config) (map[string]string, error) {
+func buildRouterAddressOptions(host, port, staticKey string, ntcp2Config *ntcp2noise.Config, forced bool) (map[string]string, error) {
 	// Validate IV length (required per spec: 16 bytes binary -> 24 bytes Base64)
 	if len(ntcp2Config.ObfuscationIV) != obfuscationIVSize {
 		return nil, oops.Errorf("invalid IV length: expected 16 bytes, got %d", len(ntcp2Config.ObfuscationIV))
 	}
 
-	if isPublicIP(host) {
+	// forced=true means the operator asserted reachability via
+	// router.external_address; publish host=/port= even though the bound host
+	// is not auto-detected as publicly routable.
+	if forced || isPublicIP(host) {
 		// Published address: include host, port, and IV so remote peers can connect directly.
 		// Per I2P spec, 'i' (IV) is only present for published NTCP2 addresses.
 		ivB64 := i2pbase64.I2PEncoding.EncodeToString(ntcp2Config.ObfuscationIV)

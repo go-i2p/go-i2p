@@ -154,6 +154,23 @@ type RouterConfig struct {
 	// i2p.router.net.upnp.
 	// Default: true.
 	UpnpEnabled bool
+	// ExternalAddress is the host[:port] this router advertises in its
+	// RouterInfo transport addresses, overriding auto-detection. Set it when
+	// the router sits behind a NAT/firewall with no UPnP/NAT-PMP and no
+	// publicly-routable interface, but the operator has port-forwarded the
+	// transport ports and knows the reachable public address (e.g. a Docker
+	// container with a published port on a public host). When set, NTCP2 and
+	// SSU2 publish host=/port= for this address instead of a caps-only
+	// address, so peers can dial back in. The port component is optional: if
+	// omitted, each transport advertises its own bound port with the
+	// overridden host. Leave empty (the default) to auto-detect.
+	//
+	// This is the operator override i2pd/Java expose as manual host=; without
+	// it a router with no gateway and no public interface can never advertise
+	// an inbound address. Hidden mode still wins: when Hidden is true no
+	// transport addresses are published at all, override included.
+	// Default: "" (auto-detect).
+	ExternalAddress string
 	// Tunnel configuration for tunnel pool management and building.
 	Tunnel *TunnelDefaults
 	// Transport configuration for NTCP2/SSU2 transports.
@@ -302,6 +319,7 @@ func copyBaseFields(src *RouterConfig) *RouterConfig {
 		AlwaysZeroHopInbound:      src.AlwaysZeroHopInbound,
 		AlwaysOneHopOutbound:      src.AlwaysOneHopOutbound,
 		UpnpEnabled:               src.UpnpEnabled,
+		ExternalAddress:           src.ExternalAddress,
 	}
 }
 

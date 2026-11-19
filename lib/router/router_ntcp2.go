@@ -79,6 +79,10 @@ func createNTCP2TransportInstance(r *Router, ri *router_info.RouterInfo, addr st
 	// transport would otherwise open on a public bind (I2P-H-5: NTCP2 was the
 	// half still mapping unconditionally; this mirrors the SSU2 gate).
 	ntcp2Config.DisablePortMapping = !r.cfg.UpnpEnabled
+	// router.external_address forces the advertised host[:port] in our
+	// RouterInfo, overriding auto-detection (for NAT/Docker with port
+	// forwarding and no gateway/public interface).
+	ntcp2Config.ExternalAddress = r.cfg.ExternalAddress
 
 	log.WithField("at", "buildNTCP2Transport").Debug("creating NTCP2 transport instance")
 	ntcp2Transport, err := ntcp.NewNTCP2Transport(*ri, ntcp2Config, r.keystore)

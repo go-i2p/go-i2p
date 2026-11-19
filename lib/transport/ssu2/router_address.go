@@ -237,11 +237,55 @@ func ConvertToRouterAddress(transport *SSU2Transport) (*router_address.RouterAdd
 	}
 
 	host = resolvePublishedHost(host, transport)
+
+	// Operator override: when router.external_address is set to a valid IP,
+	// advertise it verbatim (with the bound port unless the override carries
+	// its own port) and publish host=/port= regardless of the bound
+	// interface's routability, bypassing the introducer-only branch.
+	host, portStr, forced := applyExternalOverride(transport.config.Load().ExternalAddress, host, portStr)
+
 	introducers := transport.GetIntroducers()
-	options := buildSSU2Options(host, portStr, transport, introducers)
+	options := buildSSU2Options(host, portStr, transport, introducers, forced)
 	cost := calculateSSU2AddressCost(options)
 
 	return createSSU2RouterAddress(cost, options)
+}
+
+// applyExternalOverride applies the operator's router.external_address override.
+// When override is a valid IP literal (optionally host:port), it replaces host
+// (and port, when the override carries one) and returns forced=true so the
+// caller publishes host=/port= even though the bound interface is not publicly
+// routable. An empty or invalid override leaves host/port untouched and returns
+// forced=false, preserving auto-detection. Mirrors ntcp2.applyExternalOverride.
+func applyExternalOverride(override, host, port string) (string, string, bool) {
+	if override == "" {
+		return host, port, false
+	}
+	oh, op, ok := parseExternalOverride(override)
+	if !ok {
+		log.WithField("external_address", override).
+			Warn("router.external_address is not a valid IP or host:port; ignoring override")
+		return host, port, false
+	}
+	if op != "" {
+		port = op
+	}
+	return oh, port, true
+}
+
+// parseExternalOverride parses an operator external-address override into a host
+// IP literal and an optional port. Accepts "ip" or "ip:port" (bracketed IPv6
+// "[ip]:port" too). Returns ok=false when the host component is not a valid IP.
+func parseExternalOverride(override string) (host, port string, ok bool) {
+	h := override
+	if h2, p, err := net.SplitHostPort(override); err == nil {
+		h, port = h2, p
+	}
+	ip := net.ParseIP(strings.TrimSpace(h))
+	if ip == nil {
+		return "", "", false
+	}
+	return ip.String(), port, true
 }
 
 // validateAndExtractAddress validates the transport and extracts host/port from its address.
@@ -302,8 +346,8 @@ func createSSU2RouterAddress(cost uint8, options map[string]string) (*router_add
 // introducer hints here satisfies the MUST without making us harder to reach.
 // Dropping host/port instead would have been the literal alternative and would
 // have cost a directly-reachable router its inbound connectivity.
-func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducers []*ssu2noise.RegisteredIntroducer) map[string]string {
-	if !isPublicHost(host) && hasUsableIntroducer(introducers) {
+func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducers []*ssu2noise.RegisteredIntroducer, forced bool) map[string]string {
+	if !forced && !isPublicHost(host) && hasUsableIntroducer(introducers) {
 		familyCaps := ssu2AddressFamilyCaps(host)
 		options := map[string]string{
 			router_address.PROTOCOL_VERSION_OPTION_KEY: ssu2VersionString,
@@ -314,7 +358,7 @@ func buildSSU2Options(host, portStr string, transport *SSU2Transport, introducer
 		addIntroducerOptions(options, introducers)
 		return options
 	}
-	if !isPublicHost(host) {
+	if !forced && !isPublicHost(host) {
 		// Hidden / firewalled with no introducer: publish caps-only so the
 		// RouterInfo is still spec-conformant (no private hosts leaked) while
 		// still advertising SSU2 capability. Peers cannot dial us directly,

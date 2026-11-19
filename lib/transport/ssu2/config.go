@@ -173,6 +173,18 @@ type Config struct {
 	// gateway to open a port.
 	DisablePortMapping bool
 
+	// ExternalAddress is an operator-supplied host[:port] to advertise in this
+	// transport's published RouterAddress, overriding auto-detection. When set
+	// to a valid IP literal, the address is published with host=/port= for that
+	// endpoint even if the bound interface is private/unspecified (e.g. a Docker
+	// container with no gateway and no public interface), and the introducer-only
+	// publication branch is bypassed because a directly-dialable address is
+	// strictly better. The port component is optional; when omitted the
+	// transport's bound port is advertised with the overridden host. Empty (the
+	// default) keeps auto-detection. Set by the router from
+	// router.external_address. Mirrors ntcp2.Config.ExternalAddress.
+	ExternalAddress string
+
 	*ssu2noise.SSU2Config
 }
 

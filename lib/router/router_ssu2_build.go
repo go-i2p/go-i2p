@@ -71,6 +71,10 @@ func createSSU2TransportInstance(r *Router, ri *router_info.RouterInfo, addr str
 	// router.upnp_enabled=false suppresses the UPnP/NAT-PMP port mapping the
 	// transport would otherwise open on a public bind.
 	ssu2Config.DisablePortMapping = !r.cfg.UpnpEnabled
+	// router.external_address forces the advertised host[:port] in our
+	// RouterInfo, overriding auto-detection (for NAT/Docker with port
+	// forwarding and no gateway/public interface).
+	ssu2Config.ExternalAddress = r.cfg.ExternalAddress
 	ssu2Config.RouterLookupFunc = func(hash common.Hash) (router_info.RouterInfo, error) {
 		ch := r.netdb.GetRouterInfo(hash)
 		var ri router_info.RouterInfo

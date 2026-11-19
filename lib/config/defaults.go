@@ -95,6 +95,11 @@ type RouterDefaults struct {
 	// explicit firewall control or a stronger anonymity posture.
 	// Default: true
 	UpnpEnabled bool
+
+	// ExternalAddress is the host[:port] advertised in the RouterInfo transport
+	// addresses, overriding auto-detection. Empty (the default) auto-detects.
+	// See RouterConfig.ExternalAddress.
+	ExternalAddress string
 }
 
 // NetDBDefaults contains default values for network database configuration
@@ -501,6 +506,7 @@ func buildRouterDefaults(baseDir, workingDir string) RouterDefaults {
 		MaxConcurrentSessions:     DefaultMaxConcurrentSessions,
 		BandwidthTier:             "",
 		UpnpEnabled:               true,
+		ExternalAddress:           "",
 	}
 }
 

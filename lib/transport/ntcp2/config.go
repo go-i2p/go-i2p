@@ -75,6 +75,16 @@ type Config struct {
 	// NTCP2 was the half that still mapped unconditionally).
 	DisablePortMapping bool
 
+	// ExternalAddress is an operator-supplied host[:port] to advertise in this
+	// transport's published RouterAddress, overriding auto-detection. When set
+	// to a valid IP literal, the address is published with host=/port= for that
+	// endpoint even if the bound interface is private/unspecified (e.g. a Docker
+	// container with no gateway and no public interface). The port component is
+	// optional; when omitted the transport's bound port is advertised with the
+	// overridden host. Empty (the default) keeps auto-detection. Set by the
+	// router from router.external_address.
+	ExternalAddress string
+
 	*ntcp2.Config
 }
 

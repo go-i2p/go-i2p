@@ -31,7 +31,7 @@ func TestPublishedAddressHostPortAndIntroducersAreMutuallyExclusive(t *testing.T
 	intros := []*ssu2noise.RegisteredIntroducer{makeUsableIntroducer(t, 7)}
 
 	// Publicly routable host: host+port published, no introducer options.
-	pub := buildSSU2Options("8.8.8.8", "8888", tr, intros)
+	pub := buildSSU2Options("8.8.8.8", "8888", tr, intros, false)
 	require.Equal(t, "8.8.8.8", pub[router_address.HOST_OPTION_KEY],
 		"a publicly routable host must still be published so peers can dial us")
 	assert.Equal(t, "8888", pub[router_address.PORT_OPTION_KEY])
@@ -40,7 +40,7 @@ func TestPublishedAddressHostPortAndIntroducersAreMutuallyExclusive(t *testing.T
 	assert.NotContains(t, pub, router_address.INTRODUCER_TAG_PREFIX+"0")
 
 	// Firewalled host with introducers: introducers published, no host/port.
-	fw := buildSSU2Options("10.0.0.5", "8888", tr, intros)
+	fw := buildSSU2Options("10.0.0.5", "8888", tr, intros, false)
 	assert.NotContains(t, fw, router_address.HOST_OPTION_KEY,
 		"host must be absent when introducers are published")
 	assert.NotContains(t, fw, router_address.PORT_OPTION_KEY,
@@ -52,7 +52,7 @@ func TestPublishedAddressHostPortAndIntroducersAreMutuallyExclusive(t *testing.T
 	for name, opts := range map[string]map[string]string{
 		"public":     pub,
 		"firewalled": fw,
-		"hidden":     buildSSU2Options("10.0.0.5", "8888", tr, nil),
+		"hidden":     buildSSU2Options("10.0.0.5", "8888", tr, nil, false),
 	} {
 		hasHostPort := opts[router_address.HOST_OPTION_KEY] != "" ||
 			opts[router_address.PORT_OPTION_KEY] != ""
@@ -69,7 +69,7 @@ func TestIntroducerAddressCarriesFamilyCaps(t *testing.T) {
 	intros := []*ssu2noise.RegisteredIntroducer{makeUsableIntroducer(t, 7)}
 
 	for _, host := range []string{"10.0.0.5", "fd00::1", "not-an-ip", ""} {
-		opts := buildSSU2Options(host, "8888", tr, intros)
+		opts := buildSSU2Options(host, "8888", tr, intros, false)
 		if opts[router_address.INTRODUCER_HASH_PREFIX+"0"] == "" {
 			continue // branch did not publish introducers, rule does not apply
 		}
