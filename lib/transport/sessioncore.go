@@ -24,6 +24,39 @@ type AcceptedConn struct {
 	Value interface{}
 }
 
+// IsAcceptedConn reports whether a session-map entry is an AcceptedConn marker,
+// regardless of whether it was stored as the value (AcceptedConn) or a pointer
+// (*AcceptedConn). SessionRegistry.MarkAccepted stores the pointer form, while
+// some tests and earlier code paths used the value form; matching only one form
+// caused legitimately-present accepted entries to be misclassified as an
+// unexpected map-entry type. Use this helper everywhere an entry is tested for
+// the accepted marker so both representations are recognized consistently.
+func IsAcceptedConn(entry interface{}) bool {
+	switch entry.(type) {
+	case AcceptedConn, *AcceptedConn:
+		return true
+	default:
+		return false
+	}
+}
+
+// AcceptedConnValue returns the wrapped connection stored in an AcceptedConn
+// marker (value or pointer form), and reports whether the entry was a marker.
+// It returns (nil, true) for a marker whose Value is nil.
+func AcceptedConnValue(entry interface{}) (interface{}, bool) {
+	switch v := entry.(type) {
+	case AcceptedConn:
+		return v.Value, true
+	case *AcceptedConn:
+		if v == nil {
+			return nil, true
+		}
+		return v.Value, true
+	default:
+		return nil, false
+	}
+}
+
 // DefaultSendQueueDrainTimeout is the maximum time to wait for queued messages
 // to be sent before the session is closed. Used by DrainSendQueue.
 const DefaultSendQueueDrainTimeout = 2 * time.Second

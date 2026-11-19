@@ -1882,7 +1882,10 @@ func (t *NTCP2Transport) resolveSessionMapEntry(existing interface{}) sessionMap
 
 	// Skip connections already delivered to Accept() (X-1 fix).
 	// The Accept() consumer owns the socket; promotion would create dual ownership.
-	if _, ok := existing.(transport.AcceptedConn); ok {
+	// Match both value and pointer forms: SessionRegistry.MarkAccepted stores the
+	// pointer form, so a value-only assertion misclassified accepted entries as
+	// unexpected map entries.
+	if transport.IsAcceptedConn(existing) {
 		return sessionMapEntryResolution{kind: entryIsAcceptedConn}
 	}
 
@@ -1992,7 +1995,7 @@ func (t *NTCP2Transport) promoteInboundConnection(conn net.Conn, original interf
 	// Defensive check: refuse to promote an acceptedConn (X-1 fix).
 	// This should never happen if findExistingSession is correct, but
 	// defense-in-depth prevents dual socket ownership.
-	if _, ok := original.(transport.AcceptedConn); ok {
+	if transport.IsAcceptedConn(original) {
 		atomic.AddInt32(&t.acceptedConnPromotionAttempts, 1)
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
@@ -2624,6 +2627,18 @@ func (t *NTCP2Transport) setupSession(conn *ntcp2.Conn, routerHash data.Hash) *N
 		// and return the existing one. Release the reserved session slot.
 		_ = session.Close()
 		t.unreserveSessionSlot()
+		// If the existing entry is an accepted marker, the Accept() consumer
+		// owns that socket and will promote it to a session shortly. It is not
+		// corrupt: do not delete it and do not attempt to reuse it here. Return
+		// nil so the caller abandons this redundant outbound dial; the accepted
+		// session is found and reused on the next lookup once promoted.
+		if transport.IsAcceptedConn(existing) {
+			routerHashBytes := routerHash.Bytes()
+			t.logger.WithFields(map[string]interface{}{
+				"router_hash": logutil.HashPrefixPlain(routerHashBytes),
+			}).Debug("setupSession: peer already has an accepted connection owned by Accept — abandoning redundant dial")
+			return nil
+		}
 		resolved := t.resolveExistingSession(existing, routerHash)
 		if resolved == nil {
 			// resolveExistingSession encountered an unexpected map entry type.
@@ -2726,7 +2741,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 	// AcceptedConn by another goroutine, we must not attempt promotion as that would
 	// violate the ownership invariant (Accept() consumer owns the socket).
 	// This race window exists between resolveSessionMapEntry's type check and this call.
-	if _, ok := existing.(transport.AcceptedConn); ok {
+	if transport.IsAcceptedConn(existing) {
 		atomic.AddInt32(&t.acceptedConnPromotionAttempts, 1)
 		routerHashBytes := routerHash.Bytes()
 		t.logger.WithFields(map[string]interface{}{
@@ -2792,7 +2807,7 @@ func (t *NTCP2Transport) promoteRawConnToSession(rawConn net.Conn, routerHash da
 	_ = promoted.Close()
 
 	if winner, exists := t.sessionRegistry.Load(routerHash); exists {
-		if _, isAcceptedConn := winner.(transport.AcceptedConn); isAcceptedConn {
+		if transport.IsAcceptedConn(winner) {
 			// Accept() won against us. The connection is now owned by
 			// Accept() and will be delivered to the listener. We don't increment the counter
 			// here because we already incremented it at line 1910 (or didn't, if existing
@@ -3073,6 +3088,16 @@ func (t *NTCP2Transport) closeIndividualSession(key, value interface{}) {
 			if err := closer.Close(); err != nil && hashOk {
 				routerHashBytes := routerHash.Bytes()
 				t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Warn("Error closing accepted connection")
+			}
+		}
+	case *transport.AcceptedConn:
+		// Pointer-form marker stored by SessionRegistry.MarkAccepted.
+		if wrapped, ok := transport.AcceptedConnValue(v); ok {
+			if closer, ok := wrapped.(interface{ Close() error }); ok {
+				if err := closer.Close(); err != nil && hashOk {
+					routerHashBytes := routerHash.Bytes()
+					t.logger.WithError(err).WithField("router_hash", logutil.HashPrefixPlain(routerHashBytes)).Warn("Error closing accepted connection")
+				}
 			}
 		}
 	case net.Conn:

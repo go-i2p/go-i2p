@@ -1257,7 +1257,7 @@ func (t *SSU2Transport) resolveSessionFromMap(existing interface{}, routerHash d
 
 	// Skip connections already delivered to Accept() (X-2 fix).
 	// The Accept() consumer owns the socket; promotion would create dual ownership.
-	if _, ok := existing.(transport.AcceptedConn); ok {
+	if transport.IsAcceptedConn(existing) {
 		return nil, false
 	}
 
@@ -1271,7 +1271,7 @@ func (t *SSU2Transport) promoteInboundConnection(conn net.Conn, original interfa
 	// Defensive check: refuse to promote an acceptedConn (X-2 fix).
 	// This should never happen if resolveSessionFromMap is correct, but
 	// defense-in-depth prevents dual socket ownership.
-	if _, ok := original.(transport.AcceptedConn); ok {
+	if transport.IsAcceptedConn(original) {
 		t.logger.WithFields(map[string]interface{}{
 			"router_hash": logutil.HashPrefix(routerHash),
 		}).Error("Refusing to promote acceptedConn (already delivered to Accept)")
@@ -1556,7 +1556,7 @@ func (t *SSU2Transport) registerOrReuseSession(conn *ssu2noise.SSU2Conn, routerH
 		}
 		// Skip connections already delivered to Accept() (X-2 fix).
 		// The Accept() consumer owns the socket; treat as concurrent connection attempt.
-		if _, ok := existing.(transport.AcceptedConn); ok {
+		if transport.IsAcceptedConn(existing) {
 			// Close the newly dialed session since we can't reuse the accepted conn.
 			return nil, false, oops.Errorf("peer has accepted connection (owned by Accept consumer)")
 		}
@@ -1733,8 +1733,8 @@ func (t *SSU2Transport) Close() error {
 		t.sessionRegistry.Range(func(key, value interface{}) bool {
 			if session, ok := value.(*SSU2Session); ok {
 				_ = session.Close()
-			} else if accepted, ok := value.(transport.AcceptedConn); ok {
-				if closer, ok := accepted.Value.(interface{ Close() error }); ok {
+			} else if accepted, ok := transport.AcceptedConnValue(value); ok {
+				if closer, ok := accepted.(interface{ Close() error }); ok {
 					_ = closer.Close()
 				}
 			} else if conn, ok := value.(net.Conn); ok {
@@ -1927,7 +1927,7 @@ func (t *SSU2Transport) findSessionByHash(hash data.Hash) *SSU2Session {
 
 	// Skip connections already delivered to Accept().
 	// The Accept() consumer owns the socket; promotion would create dual ownership.
-	if _, ok := val.(transport.AcceptedConn); ok {
+	if transport.IsAcceptedConn(val) {
 		return nil
 	}
 

@@ -98,7 +98,7 @@ type PromoteOptions struct {
 // - The caller is responsible for closing the session and connection
 func (sr *SessionRegistry) Promote(peerHash data.Hash, original, newSession interface{}, opts PromoteOptions) (interface{}, bool) {
 	// Defense-in-depth: refuse to promote an AcceptedConn (dual-ownership protection)
-	if _, ok := original.(*AcceptedConn); ok {
+	if IsAcceptedConn(original) {
 		sr.logger.WithField("peer_hash", logutil.HashPrefixPlain(peerHash)).
 			Error("Refusing to promote acceptedConn (already delivered to Accept)")
 		return nil, false
@@ -264,7 +264,7 @@ func (sr *SessionRegistry) GetSessions() []interface{} {
 	var sessions []interface{}
 	sr.sessions.Range(func(_, value interface{}) bool {
 		// Skip AcceptedConn markers (those are owned by Accept consumers)
-		if _, ok := value.(*AcceptedConn); !ok {
+		if !IsAcceptedConn(value) {
 			sessions = append(sessions, value)
 		}
 		return true
