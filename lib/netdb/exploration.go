@@ -356,6 +356,12 @@ func (e *Explorer) performExploratoryLookup(index int, lookupHash common.Hash) e
 		// exploration lookup type, prompting floodfills to return routers we don't
 		// yet know about rather than treating the random hash as a direct RI lookup.
 		resolver.SetExploration(true)
+		// Parent the resolver's lookups on the explorer's lifecycle context so
+		// Stop() cancels in-flight lookups instead of leaving them running until
+		// their own per-lookup timeout expires. Without this, a lookup spawned
+		// just before shutdown keeps its fire-and-forget query goroutines alive
+		// past Explorer.Stop(), which only waits on its own WaitGroup.
+		resolver.SetContext(e.ctx)
 		e.cachedResolver = resolver
 	}
 	e.fieldMu.Unlock()

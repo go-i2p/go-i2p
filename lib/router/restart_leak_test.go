@@ -22,12 +22,63 @@ func TestRestartNoGoroutineLeak(t *testing.T) {
 		t.Skip("restart leak probe is slow; skipped under -short")
 	}
 
-	settle := func() int {
-		for i := 0; i < 10; i++ {
-			time.Sleep(50 * time.Millisecond)
+	// A full Start/Stop/Close cycle tears down the router's bootstrap, which
+	// spawns hundreds of goroutines that drain over a few seconds after Close()
+	// returns (the count is still ~280 at 500 ms but ~2 once fully settled). A
+	// fixed short settle window therefore samples a still-drifting count and the
+	// per-round delta is dominated by drain noise, so the test flakes.
+	//
+	// settleStable establishes the baseline: it polls until the count is stable
+	// for several consecutive readings (or a deadline passes). The baseline is
+	// the genuinely stable low floor (the test goroutine plus GC), so a
+	// stability check is the right signal there.
+	settleStable := func() int {
+		const (
+			maxWait      = 15 * time.Second
+			stableNeeded = 3 // consecutive equal readings
+		)
+		deadline := time.Now().Add(maxWait)
+		prev := -1
+		stable := 0
+		count := runtime.NumGoroutine()
+		for time.Now().Before(deadline) {
+			time.Sleep(100 * time.Millisecond)
 			runtime.GC()
+			count = runtime.NumGoroutine()
+			if count == prev {
+				stable++
+				if stable >= stableNeeded {
+					return count
+				}
+			} else {
+				stable = 0
+			}
+			prev = count
 		}
-		return runtime.NumGoroutine()
+		return count
+	}
+
+	// settleTo polls until the count has drained back to target (or a deadline
+	// passes). Unlike a stability check, it does NOT return early on a transient
+	// plateau: under CPU starvation a goroutine blocked in a select on a timer /
+	// context becomes runnable when its deadline fires but may not be scheduled
+	// to observe it immediately, so the count can sit at base+2 for a moment
+	// before draining. Waiting for the count to actually reach the baseline
+	// distinguishes "fully drained" (delta 0) from "stuck elevated" (a real
+	// leak, which never reaches the baseline and so waits out the deadline).
+	settleTo := func(target int) int {
+		const maxWait = 20 * time.Second
+		deadline := time.Now().Add(maxWait)
+		count := runtime.NumGoroutine()
+		for time.Now().Before(deadline) {
+			if count <= target {
+				return count
+			}
+			time.Sleep(100 * time.Millisecond)
+			runtime.GC()
+			count = runtime.NumGoroutine()
+		}
+		return count
 	}
 
 	// Warm up one full cycle so lazily-created runtime pools exist before we
@@ -41,7 +92,7 @@ func TestRestartNoGoroutineLeak(t *testing.T) {
 	w.Stop()
 	_ = w.Close()
 
-	base := settle()
+	base := settleStable()
 	t.Logf("baseline goroutines: %d", base)
 
 	// A per-cycle leak accumulates linearly (delta == round+1 after each round),
@@ -74,7 +125,7 @@ func TestRestartNoGoroutineLeak(t *testing.T) {
 		if err := r.Close(); err != nil {
 			t.Fatalf("round %d Close: %v", round, err)
 		}
-		after := settle()
+		after := settleTo(base)
 		lastDelta = after - base
 		t.Logf("after round %d: %d goroutines (delta %d)", round, after, lastDelta)
 	}

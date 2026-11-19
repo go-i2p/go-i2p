@@ -136,6 +136,13 @@ type KademliaResolver struct {
 	// lookups) instead of treating the request as a direct RouterInfo lookup.
 	// Guarded by mu like transport/ourHash.
 	exploration bool
+	// baseCtx is the parent context every Lookup derives its timeout context
+	// from. It defaults to context.Background() so a standalone resolver is
+	// unaffected, but an owner (e.g. the Explorer) can install its own lifecycle
+	// context via SetContext so shutdown cancels in-flight lookups instead of
+	// letting them linger until their own per-lookup timeout expires. Guarded by
+	// mu like the other post-construction fields.
+	baseCtx context.Context
 }
 
 // peerDistance represents a peer with its calculated XOR distance
@@ -154,8 +161,10 @@ func (kr *KademliaResolver) Lookup(h common.Hash, timeout time.Duration) (*route
 		"timeout": timeout,
 	}).Debug("starting Kademlia lookup")
 
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	// Create a context with timeout, parented on the resolver's base context so
+	// an owner that installs a lifecycle context via SetContext can cancel an
+	// in-flight lookup on shutdown instead of waiting for its own timeout.
+	ctx, cancel := context.WithTimeout(kr.lookupContext(), timeout)
 	defer cancel()
 
 	// Try local lookup first

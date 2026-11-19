@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	"context"
 	"net"
 
 	"github.com/go-i2p/go-i2p/lib/transport"
@@ -59,7 +60,9 @@ func NewDefaultHandler() *DefaultHandler {
 // random TCP service to an active prober.
 func (h *DefaultHandler) OnHandshakeError(rawConn net.Conn, err error) {
 	log.WithError(err).Debug("NTCP2 handshake error, applying probing resistance")
-	applyProbingResistance(rawConn)
+	// context.Background(): the responder-side handshake-error handler has no
+	// request context, so the full anti-probing delay applies.
+	applyProbingResistance(context.Background(), rawConn)
 }
 
 // ValidateTimestamp checks whether a peer's timestamp is within ±60 seconds

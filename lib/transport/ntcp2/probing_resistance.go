@@ -1,6 +1,7 @@
 package ntcp2
 
 import (
+	"context"
 	"io"
 	"math/big"
 	"net"
@@ -39,17 +40,35 @@ const (
 // so that both sides are indistinguishable in their failure behaviour.
 //
 // The function is a no-op if rawConn is nil.
-func applyProbingResistance(rawConn net.Conn) {
+//
+// ctx bounds the anti-probing delay: when it is cancelled (e.g. the transport
+// is closing), the delay is abandoned immediately rather than sleeping out its
+// full random duration. This keeps shutdown from being blocked by a purely
+// cosmetic anti-probing wait, and lets a dial abandoned at shutdown return
+// promptly instead of lingering in the sleep. A nil ctx is treated as
+// context.Background() (never interrupted).
+func applyProbingResistance(ctx context.Context, rawConn net.Conn) {
 	if rawConn == nil {
 		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	logger := log.WithField("component", "probing_resistance")
 
-	// 1. Apply random delay (0 to probingResistanceMaxDelay ms)
+	// 1. Apply random delay (0 to probingResistanceMaxDelay ms), interruptible
+	//    on ctx cancellation so shutdown does not block on the delay.
 	delay := randomDuration(probingResistanceMaxDelay)
 	logger.WithField("delay_ms", delay.Milliseconds()).Debug("Applying probing resistance delay")
-	time.Sleep(delay)
+	timer := time.NewTimer(delay)
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		timer.Stop()
+		logger.Debug("Probing resistance delay interrupted by context cancellation")
+		return
+	}
 
 	// 2. Read random number of junk bytes (0 to probingResistanceMaxJunkBytes)
 	junkSize := randomInt(probingResistanceMaxJunkBytes + 1)

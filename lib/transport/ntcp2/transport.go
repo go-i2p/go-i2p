@@ -2332,7 +2332,7 @@ func (t *NTCP2Transport) performNTCP2Handshake(ntcp2Addr net.Addr, tcpAddrString
 		// Both initiator and responder must behave identically on failure.
 		raw := extractRawConn(conn.UnderlyingConn())
 		t.logger.WithError(err).Debug("Outbound handshake failed, applying probing resistance")
-		applyProbingResistance(raw)
+		applyProbingResistance(handshakeCtx, raw)
 		_ = conn.Close()
 		return nil, WrapNTCP2Error(err, "NTCP2 handshake (probing resistance applied)")
 	}

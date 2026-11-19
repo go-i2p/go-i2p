@@ -1,6 +1,8 @@
 package netdb
 
 import (
+	"context"
+
 	common "github.com/go-i2p/common/data"
 	"github.com/go-i2p/go-i2p/lib/tunnel"
 	"github.com/go-i2p/logger"
@@ -88,6 +90,33 @@ func (kr *KademliaResolver) SetOurHash(hash common.Hash) {
 		"at":     "KademliaResolver.SetOurHash",
 		"reason": "our_hash_configured",
 	}).Debug("our router hash set")
+}
+
+// SetContext installs a parent context that every Lookup derives its timeout
+// context from. An owner with a lifecycle (e.g. the Explorer) sets its own
+// context here so that stopping the owner cancels in-flight lookups at their
+// context-check points, rather than leaving them running until their own
+// per-lookup timeout expires. A nil argument is ignored; the resolver then
+// keeps its default context.Background() parent.
+func (kr *KademliaResolver) SetContext(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	kr.mu.Lock()
+	kr.baseCtx = ctx
+	kr.mu.Unlock()
+}
+
+// lookupContext returns the resolver's base context, defaulting to
+// context.Background() when none was installed.
+func (kr *KademliaResolver) lookupContext() context.Context {
+	kr.mu.RLock()
+	ctx := kr.baseCtx
+	kr.mu.RUnlock()
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
 }
 
 // SetExploration marks this resolver as performing NetDB exploration. When enabled,

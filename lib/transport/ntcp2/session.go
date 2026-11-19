@@ -160,7 +160,10 @@ func (s *NTCP2Session) CloseWithReason(reason byte) error {
 			s.connMu.Unlock()
 			if conn != nil {
 				raw := extractRawConn(conn)
-				applyProbingResistance(raw)
+				// context.Background(): this is a deliberate AEAD-failure close,
+				// so the full anti-probing delay should apply (the session ctx is
+				// already cancelled here and would skip it).
+				applyProbingResistance(context.Background(), raw)
 			}
 		} else {
 			// On an error-driven teardown the send worker may be parked writing
