@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,6 +26,7 @@ func TestDefaultNetDbConfig(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, cfg.ExplorationInterval, "ExplorationInterval")
 	assert.False(t, cfg.FloodfillEnabled, "FloodfillEnabled should be false by default")
 	assert.True(t, cfg.StrictRouterInfoNetworkValidation, "StrictRouterInfoNetworkValidation should be true by default")
+	assert.Equal(t, "2", cfg.NetID, "NetID should default to production network \"2\"")
 	assert.Equal(t, 80, cfg.RouterInfoAdmissionPressureThresholdPct, "RouterInfoAdmissionPressureThresholdPct")
 }
 
@@ -40,6 +42,7 @@ func TestNetDbConfigViperRoundTrip(t *testing.T) {
 	assert.NotZero(t, cfg.NetDB.LeaseSetRefreshThreshold, "LeaseSetRefreshThreshold should be populated")
 	assert.NotZero(t, cfg.NetDB.ExplorationInterval, "ExplorationInterval should be populated")
 	assert.True(t, cfg.NetDB.StrictRouterInfoNetworkValidation, "StrictRouterInfoNetworkValidation should be populated")
+	assert.Equal(t, "2", cfg.NetDB.NetID, "NetID should be populated from viper defaults")
 	assert.NotZero(t, cfg.NetDB.RouterInfoAdmissionPressureThresholdPct, "RouterInfoAdmissionPressureThresholdPct should be populated")
 }
 
@@ -55,4 +58,17 @@ func TestNetDbConfigUpdateRoundTrip(t *testing.T) {
 	assert.NotZero(t, netdb.MaxLeaseSets, "MaxLeaseSets should be populated after UpdateRouterConfig")
 	assert.NotZero(t, netdb.ExpirationCheckInterval, "ExpirationCheckInterval should be populated after UpdateRouterConfig")
 	assert.NotZero(t, netdb.RouterInfoAdmissionPressureThresholdPct, "RouterInfoAdmissionPressureThresholdPct should be populated after UpdateRouterConfig")
+}
+
+// TestNetDbConfigNetIDOverride verifies an operator-set netdb.net_id (e.g. "3"
+// for a testnet) replaces the production default "2" when the config is built
+// from viper, so the network ID is genuinely configurable end-to-end.
+func TestNetDbConfigNetIDOverride(t *testing.T) {
+	configTestSetup(t)
+
+	viper.Set("netdb.net_id", "3")
+	cfg, err := NewRouterConfigFromViper()
+	require.NoError(t, err)
+	require.NotNil(t, cfg.NetDB, "NetDB config should not be nil")
+	assert.Equal(t, "3", cfg.NetDB.NetID, "NetID must be read from netdb.net_id")
 }

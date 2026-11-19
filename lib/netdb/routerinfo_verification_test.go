@@ -121,3 +121,39 @@ func TestVerifyRouterInfoNetwork_RejectsMissingVersion(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "router.version")
 }
+
+// TestSetNetID_ChangesExpectedNetwork verifies that SetNetID lets a testnet
+// accept RouterInfos carrying the configured netId and reject the production
+// netId, so the network ID is configurable rather than hardcoded to "2".
+func TestSetNetID_ChangesExpectedNetwork(t *testing.T) {
+	db := NewStdNetDB(t.TempDir())
+	require.NoError(t, db.Create())
+	db.SetStrictRouterInfoNetworkValidation(true)
+
+	// Default expects production netId "2": a testnet netId "3" is rejected.
+	testnetRI := testutil.CreateSignedTestRouterInfo(t, map[string]string{"netId": "3"}, nil)
+	require.NotNil(t, testnetRI)
+	require.Error(t, db.verifyRouterInfoNetwork(*testnetRI))
+
+	// Switch to testnet netId "3": now "3" is accepted and "2" is rejected.
+	db.SetNetID("3")
+	require.NoError(t, db.verifyRouterInfoNetwork(*testnetRI))
+
+	prodRI := testutil.CreateSignedTestRouterInfo(t, map[string]string{"netId": "2"}, nil)
+	require.NotNil(t, prodRI)
+	require.Error(t, db.verifyRouterInfoNetwork(*prodRI))
+}
+
+// TestSetNetID_EmptyIgnored verifies an empty netId leaves the current expected
+// network unchanged, so an unset config value never disables the check.
+func TestSetNetID_EmptyIgnored(t *testing.T) {
+	db := NewStdNetDB(t.TempDir())
+	require.NoError(t, db.Create())
+	db.SetStrictRouterInfoNetworkValidation(true)
+	db.SetNetID("")
+
+	// Still expects production netId "2".
+	prodRI := testutil.CreateSignedTestRouterInfo(t, map[string]string{"netId": "2"}, nil)
+	require.NotNil(t, prodRI)
+	require.NoError(t, db.verifyRouterInfoNetwork(*prodRI))
+}
